@@ -14,7 +14,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const STORAGE_KEY = 'spliceguard-copilot-layout';
+const STORAGE_KEY = 'nunar-copilot-layout';
 
 const MIN_W = 320;
 const MAX_W = 800;

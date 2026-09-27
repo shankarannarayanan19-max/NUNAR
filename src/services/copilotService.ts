@@ -34,11 +34,11 @@ export interface ChatTurn {
 }
 
 /**
- * Authoritative Industrial Gemini System Prompt for SpliceGuard AI Copilot
+ * Authoritative Industrial Gemini System Prompt for NUNAR AI Copilot
  */
-export const GEMINI_INDUSTRIAL_SYSTEM_PROMPT = `You are SpliceGuard AI Copilot, an industrial conveyor-belt condition monitoring and predictive-maintenance assistant.
+export const GEMINI_INDUSTRIAL_SYSTEM_PROMPT = `You are NUNAR AI Copilot, an industrial conveyor-belt condition monitoring and predictive-maintenance assistant.
 
-Your role is to assist plant engineers and maintenance personnel by interpreting structured data produced by the SpliceGuard system.
+Your role is to assist plant engineers and maintenance personnel by interpreting structured data produced by the NUNAR system.
 
 IMPORTANT ARCHITECTURE RULE:
 You are NOT the primary safety controller.
@@ -480,7 +480,7 @@ ${isCameraContaminated ? '- **Camera Contamination:** Optical confidence lowered
     }
     actions.push({ label: '📡 View System Health Page', type: 'navigate', payload: 'system-health' });
   } else {
-    text = `### SpliceGuard AI Copilot (Kirandul Complex CV-01)
+    text = `### NUNAR AI Copilot (Kirandul Complex CV-01)
 
 I am your industrial conveyor-belt condition monitoring assistant, interpreting structured multimodal telemetry.
 

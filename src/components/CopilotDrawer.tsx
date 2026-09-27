@@ -156,7 +156,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
       id: 'init-1',
       sender: 'copilot',
       text: [
-        '### SpliceGuard AI Copilot Ready',
+        '### NUNAR AI Copilot Ready',
         '',
         `**Conveyor:** ${conveyor.name} — ${conveyor.status} at ${conveyor.speedMs} m/s`,
         `**Primary Risk:** Splice S03 — Condition 68/100 (Warning)`,
@@ -313,7 +313,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           {
             id: `msg-err-${Date.now()}`,
             sender: 'copilot',
-            text: '**Communication error.** Unable to reach SpliceGuard AI Copilot service. Please try again.',
+            text: '**Communication error.** Unable to reach NUNAR AI Copilot service. Please try again.',
             timestamp: new Date().toLocaleTimeString([], {
               hour: '2-digit',
               minute: '2-digit',
@@ -424,8 +424,8 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({
           {/* Text */}
           <div className="min-w-0">
             <div className="font-display-tech font-bold text-[11px] text-white tracking-wide leading-none truncate">
-              SpliceGuard{' '}
-              <span className="text-cyan-400">AI Copilot</span>
+              NU<span className="text-cyan-400">NAR</span>{' '}
+              <span className="text-slate-300">AI Copilot</span>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 font-mono-tech text-[9px] leading-none">
               {/* Connection state */}

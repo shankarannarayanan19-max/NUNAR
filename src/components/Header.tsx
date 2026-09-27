@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleCopilot, isCopilotOpen }
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-display-tech font-bold text-base text-slate-900 tracking-wider">
-                  SPLICE<span className="text-cyan-600">GUARD</span>
+                  NU<span className="text-cyan-600">NAR</span>
                 </span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono-tech font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                   SIH 2026 | PS 26008

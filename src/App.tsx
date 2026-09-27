@@ -61,7 +61,7 @@ const AppContent: React.FC = () => {
               <span>AI COPILOT</span>
               <Sparkles className="w-3 h-3 text-amber-400" />
             </div>
-            <div className="text-[10px] text-slate-400 font-mono-tech">Ask SpliceGuard AI</div>
+            <div className="text-[10px] text-slate-400 font-mono-tech">NUNAR AI Copilot</div>
           </div>
         </button>
       )}
