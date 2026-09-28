@@ -1,0 +1,1743 @@
+
+
+
+
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-100 text-slate-850 antialiased selection:bg-amber-500 selection:text-white">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Iron Ridge Overland Conveyor CV-01 — Enterprise Digital Twin SCADA</title>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Three.js + OrbitControls -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        slate: { 850: '#151f32', 900: '#0f172a', 950: '#090d16' }
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
+
+<style>
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  .glass-panel-light {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(203, 213, 225, 0.9);
+  }
+  .glow-rose { box-shadow: 0 0 20px -2px rgba(225, 29, 72, 0.45); }
+  .pulse-alarm { animation: pulseRed 1.2s ease-in-out infinite; }
+  @keyframes pulseRed {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(1.12); }
+  }
+  .grid-pattern {
+    background-size: 24px 24px;
+    background-image: linear-gradient(to right, rgba(203, 213, 225, 0.4) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(203, 213, 225, 0.4) 1px, transparent 1px);
+  }
+</style>
+</head>
+<body class="h-full w-full overflow-hidden flex flex-col font-sans select-none bg-slate-100 text-slate-800">
+
+<!-- =====================================================================
+     TOP INDUSTRIAL SCADA APP HEADER (LIGHT THEME)
+====================================================================== -->
+<header class="h-14 bg-white border-b border-slate-200 shrink-0 flex items-center justify-between px-4 z-40 shadow-xs">
+  <div class="flex items-center gap-3">
+    <div class="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 shadow-xs">
+      <i data-lucide="layers" class="w-5 h-5"></i>
+    </div>
+    <div>
+      <div class="flex items-center gap-2">
+        <h1 class="font-bold text-sm text-slate-900 tracking-wide flex items-center gap-1.5">
+          IRON RIDGE OVERLAND CONVEYOR <span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono font-semibold border border-amber-300">CV-01</span>
+        </h1>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300" id="top-system-badge">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+          OPC-UA LIVE · 100% TELEMETRY NOMINAL
+        </span>
+      </div>
+      <p class="text-[11px] text-slate-500 font-mono">Tippler Feeder ➔ Track Hopper ➔ Primary Crusher ➔ Stockyard Stacker ➔ Multi-Sensor Array ➔ Secondary Sizer</p>
+    </div>
+  </div>
+
+  <!-- Primary SCADA metrics strip -->
+  <div class="hidden lg:flex items-center gap-6 border-l border-r border-slate-200 px-6 font-mono text-xs">
+    <div>
+      <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Ore Mass Rate</div>
+      <div class="text-slate-850 font-bold flex items-baseline gap-1">
+        <span id="metric-tph" class="text-amber-600 text-sm">8,450</span> <span class="text-[10px] text-slate-500 font-medium">TPH</span>
+      </div>
+    </div>
+    <div class="h-7 w-[1px] bg-slate-200"></div>
+    <div>
+      <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Loop Speed (Top & Return)</div>
+      <div class="text-slate-850 font-bold flex items-baseline gap-1">
+        <span id="metric-speed" class="text-cyan-600 text-sm">5.20</span> <span class="text-[10px] text-slate-500 font-medium">m/s</span>
+      </div>
+    </div>
+    <div class="h-7 w-[1px] bg-slate-200"></div>
+    <div>
+      <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Head Drive Power</div>
+      <div class="text-slate-850 font-bold flex items-baseline gap-1">
+        <span id="metric-kw" class="text-emerald-600 text-sm">1,894</span> <span class="text-[10px] text-slate-500 font-medium">kW</span>
+      </div>
+    </div>
+    <div class="h-7 w-[1px] bg-slate-200"></div>
+    <div>
+      <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Splice Integrity</div>
+      <div class="text-slate-850 font-bold flex items-baseline gap-1">
+        <span id="metric-integrity" class="text-emerald-600 text-sm">99.4%</span> <span class="text-[10px] text-slate-500 font-medium">(ST-6300)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Actions & Anomaly Trigger -->
+  <div class="flex items-center gap-3">
+    <button id="btn-toggle-anomaly" class="px-3.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-xs">
+      <i data-lucide="zap" class="w-3.5 h-3.5 text-rose-600"></i>
+      <span id="anomaly-btn-label">Trigger Real-Time Belt Defect</span>
+    </button>
+    <div class="h-7 w-[1px] bg-slate-200 hidden sm:block"></div>
+    <div class="text-right hidden sm:block font-mono">
+      <div id="live-scada-clock" class="text-xs text-slate-800 font-bold">14:32:08 UTC</div>
+      <div class="text-[10px] text-emerald-600 font-medium">MQTT Broker: Port 8883 SSL</div>
+    </div>
+  </div>
+</header>
+
+<!-- =====================================================================
+     MAIN WORKSPACE (LEFT DASHBOARD + 3D VIEWPORT + CAM PIP)
+====================================================================== -->
+<div class="flex-1 flex overflow-hidden relative">
+
+  <!-- LEFT INDUSTRIAL PANEL -->
+  <aside id="left-sidebar" class="w-88 bg-white border-r border-slate-200 flex flex-col z-30 transition-all duration-300 shrink-0 overflow-hidden shadow-xs">
+    
+    <!-- Plant Stations Header -->
+    <div class="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+      <span class="text-xs font-mono uppercase tracking-wider text-slate-600 font-bold flex items-center gap-1.5">
+        <i data-lucide="git-commit" class="w-3.5 h-3.5 text-amber-600"></i> Material Flow & Stations
+      </span>
+      <span class="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">6 NODES</span>
+    </div>
+
+    <!-- Stations Waypoint Selector -->
+    <div class="p-2 space-y-1.5 overflow-y-auto max-h-48 border-b border-slate-200 font-mono text-xs">
+      <button data-wp="tippler" class="station-btn w-full text-left p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-[10px] border border-amber-300">01</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Rotary Tippler & Track Hopper</div>
+            <div class="text-[10px] text-slate-500">Continuous Wagon Dumping Cycle</div>
+          </div>
+        </div>
+        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">DUMPING</span>
+      </button>
+
+      <button data-wp="crusher" class="station-btn w-full text-left p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-[10px] border border-amber-300">02</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Apron Feeder & Primary Crusher</div>
+            <div class="text-[10px] text-slate-500">60x89 Superior Crusher Chute</div>
+          </div>
+        </div>
+        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">OK</span>
+      </button>
+
+      <button data-wp="stockyard" class="station-btn w-full text-left p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-[10px] border border-amber-300">03</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Stockyard Radial Stacker</div>
+            <div class="text-[10px] text-slate-500">2.5Mt Hematite Blending Bed</div>
+          </div>
+        </div>
+        <span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ACTIVE</span>
+      </button>
+
+      <button data-wp="sensors" class="station-btn w-full text-left p-2 rounded-lg bg-amber-50/60 border border-amber-400 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-cyan-100 text-cyan-800 flex items-center justify-center font-bold text-[10px] border border-cyan-300">04</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Defect Diagnostic Gantry</div>
+            <div class="text-[10px] text-slate-500">MFL, AE, Splice Tags, Dual Cams</div>
+          </div>
+        </div>
+        <span id="station-sensor-badge" class="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-200">MONITOR</span>
+      </button>
+
+      <button data-wp="drive" class="station-btn w-full text-left p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-[10px] border border-amber-300">05</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Head Drive & Discharge Chute</div>
+            <div class="text-[10px] text-slate-500">Dual 1,200 kW Drive & Wrap</div>
+          </div>
+        </div>
+        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">OK</span>
+      </button>
+
+      <button data-wp="secondary" class="station-btn w-full text-left p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 flex items-center justify-between transition-all shadow-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-[10px] border border-amber-300">06</span>
+          <div>
+            <div class="font-bold text-slate-800 text-xs">Secondary Sizing Tower</div>
+            <div class="text-[10px] text-slate-500">Secondary Cone Crusher & Screens</div>
+          </div>
+        </div>
+        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">OK</span>
+      </button>
+    </div>
+
+    <!-- Active Sensor Matrix Selector Tabs -->
+    <div class="p-2.5 border-b border-slate-200 bg-slate-50/50">
+      <div class="text-[10px] font-mono text-slate-500 font-bold uppercase mb-1.5 flex justify-between">
+        <span>Fixed Sensor & Camera Matrix:</span>
+        <span class="text-cyan-700 font-bold">4 Nodes</span>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5 font-mono text-[10px]">
+        <button id="sel-mfl" class="sensor-tab active p-2 rounded-lg bg-cyan-50 border border-cyan-400 text-cyan-900 font-bold flex items-center gap-1.5 text-left shadow-xs">
+          <span class="w-2 h-2 rounded-full bg-cyan-600"></span> MFL Scanner (Ret)
+        </button>
+        <button id="sel-ae" class="sensor-tab p-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium flex items-center gap-1.5 text-left hover:bg-slate-50">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span> AE Acoustic (Idler)
+        </button>
+        <button id="sel-rgb" class="sensor-tab p-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium flex items-center gap-1.5 text-left hover:bg-slate-50">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span> RGB AI Cam (Top)
+        </button>
+        <button id="sel-thermal" class="sensor-tab p-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium flex items-center gap-1.5 text-left hover:bg-slate-50">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span> Thermal IR (Top)
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Sensor Diagnostic Live Card -->
+    <div class="flex-1 flex flex-col p-3 overflow-y-auto space-y-2.5 font-mono text-xs bg-slate-50/50">
+      <div id="sensor-card-border" class="p-3 rounded-lg bg-white border border-slate-200 space-y-2 shadow-xs transition-all">
+        <div class="flex items-start justify-between">
+          <div>
+            <div id="sensor-card-id" class="text-cyan-700 font-bold text-sm">MFL-RET-04</div>
+            <div id="sensor-card-name" class="text-slate-600 text-[11px]">Magnetic Flux Leakage Steel-Cord Scanner</div>
+          </div>
+          <span id="sensor-card-mount" class="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-semibold border border-slate-200">Return Strand</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11px] pt-1">
+          <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+            <div class="text-[9px] text-slate-500 font-semibold">Cord Integrity</div>
+            <div id="diag-val1" class="text-emerald-600 font-bold text-xs mt-0.5">99.4% (Nominal)</div>
+          </div>
+          <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+            <div class="text-[9px] text-slate-500 font-semibold">Flux Leakage Amp</div>
+            <div id="diag-val2" class="text-slate-800 font-bold text-xs mt-0.5">0.05 V Flux</div>
+          </div>
+          <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+            <div class="text-[9px] text-slate-500 font-semibold">Operating Temp</div>
+            <div id="diag-val3" class="text-slate-800 font-bold text-xs mt-0.5">38.4 °C</div>
+          </div>
+          <div class="bg-slate-50 p-1.5 rounded border border-slate-200">
+            <div class="text-[9px] text-slate-500 font-semibold">Splice Elongation</div>
+            <div id="diag-val4" class="text-slate-800 font-bold text-xs mt-0.5">+0.2 mm</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live FFT / Waveform Sparkline Chart -->
+      <div class="bg-white p-2.5 rounded-lg border border-slate-200 flex-1 flex flex-col min-h-[110px] shadow-xs">
+        <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+          <span id="chart-title">REAL-TIME MFL FLUX LEAKAGE SPECTRUM</span>
+          <span class="text-cyan-700 font-mono">100 Hz</span>
+        </div>
+        <div class="flex-1 relative w-full h-full min-h-[75px]">
+          <canvas id="liveChart" class="w-full h-full"></canvas>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER: 3D DIGITAL TWIN VIEWPORT -->
+  <main id="viewport-container" class="flex-1 h-full relative overflow-hidden bg-slate-100">
+    <canvas id="scene-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+
+    <!-- Top-Left Viewport Controls -->
+    <div class="absolute top-3 left-3 z-20 flex flex-col gap-2">
+      <div class="glass-panel-light p-1.5 rounded-lg flex items-center gap-1 shadow-md">
+        <button id="cam-orbit" class="mode-toggle active px-3 py-1 rounded-md text-xs font-mono font-bold bg-amber-500 text-white flex items-center gap-1.5 shadow-xs transition">
+          <i data-lucide="orbit" class="w-3.5 h-3.5"></i> Orbit View
+        </button>
+        <button id="cam-gallery" class="mode-toggle px-3 py-1 rounded-md text-xs font-mono font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200/70 flex items-center gap-1.5 transition">
+          <i data-lucide="footprints" class="w-3.5 h-3.5"></i> Walkway
+        </button>
+        <button id="cam-cross" class="mode-toggle px-3 py-1 rounded-md text-xs font-mono font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200/70 flex items-center gap-1.5 transition">
+          <i data-lucide="scan" class="w-3.5 h-3.5"></i> 35° Cross-Section
+        </button>
+      </div>
+
+      <!-- Layer Toggles -->
+      <div class="glass-panel-light px-3 py-2 rounded-lg flex items-center gap-4 text-xs font-mono text-slate-700 shadow-md">
+        <span class="text-[10px] text-slate-500 font-bold uppercase">Layers:</span>
+        <label class="flex items-center gap-1.5 cursor-pointer hover:text-amber-600 font-medium">
+          <input type="checkbox" id="layer-ore" checked class="accent-amber-500 rounded cursor-pointer"> Iron Ore
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer hover:text-amber-600 font-medium">
+          <input type="checkbox" id="layer-sensors" checked class="accent-amber-500 rounded cursor-pointer"> Sensors Array
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer hover:text-amber-600 font-medium">
+          <input type="checkbox" id="layer-frustum" checked class="accent-amber-500 rounded cursor-pointer"> Cam Frustums
+        </label>
+      </div>
+    </div>
+
+    <!-- Top-Right Live Camera PIP Feed Overlay -->
+    <div id="cam-pip-container" class="absolute top-3 right-3 z-20 glass-panel-light p-2.5 rounded-xl shadow-lg border border-slate-300 w-64 font-mono text-xs hidden sm:block">
+      <div class="flex items-center justify-between pb-1.5 border-b border-slate-200 mb-1.5">
+        <span id="pip-title" class="font-bold text-amber-700 flex items-center gap-1.5">
+          <i data-lucide="camera" class="w-3.5 h-3.5 text-amber-600"></i> RGB-CAM-TOP-01
+        </span>
+        <span id="pip-live-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      </div>
+      <div id="pip-video-frame" class="relative w-full h-28 rounded-lg overflow-hidden border border-slate-300 bg-slate-900 flex items-center justify-center">
+        <canvas id="pipCanvas" width="240" height="110" class="w-full h-full block"></canvas>
+        <div id="pip-hud-overlay" class="absolute inset-0 p-1.5 flex flex-col justify-between pointer-events-none text-[9px] text-white/90 font-mono">
+          <div class="flex justify-between"><span>FOV 65° · 60 FPS</span><span id="pip-temp-tag">38.4°C MAX</span></div>
+          <div class="flex justify-between"><span>BELT SPAN STA 20+00</span><span id="pip-status-tag">REC [●] LIVE</span></div>
+        </div>
+      </div>
+      <div class="flex justify-between items-center text-[10px] text-slate-500 pt-1.5">
+        <span id="pip-caption">Fixed Overhead Optical Scan</span>
+        <span id="pip-health-badge" class="text-emerald-600 font-bold">100% NOMINAL</span>
+      </div>
+    </div>
+
+    <!-- Walkthrough Control Overlay Tip -->
+    <div id="walk-nav-help" class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 z-20 glass-panel-light px-4 py-2 rounded-full font-mono text-xs text-slate-800 border border-slate-300 shadow-lg flex items-center gap-3">
+      <span class="flex items-center gap-1"><kbd class="bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-bold">W</kbd><kbd class="bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-bold">A</kbd><kbd class="bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-bold">S</kbd><kbd class="bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-bold">D</kbd> Walk</span>
+      <span>·</span>
+      <span>Click & Drag to Look</span>
+      <span>·</span>
+      <button id="btn-exit-walk" class="underline text-amber-700 font-bold hover:text-amber-800">Exit Walk</button>
+    </div>
+
+    <!-- Hover 3D Tooltip -->
+    <div id="hover-badge" class="hidden absolute z-30 pointer-events-none glass-panel-light px-3 py-2 rounded-lg text-xs font-mono text-slate-900 border border-slate-300 shadow-xl">
+      <div id="hover-badge-title" class="font-bold text-amber-700">Sensor ID</div>
+      <div id="hover-badge-desc" class="text-[10px] text-slate-600">Description</div>
+    </div>
+
+    <!-- SCADA Real-Time Defect Alarm Banner -->
+    <div id="scada-alarm-banner" class="hidden absolute top-16 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[92%] glass-panel-light bg-rose-50/95 border-2 border-rose-500 rounded-xl p-4 shadow-2xl glow-rose">
+      <div class="flex items-start gap-3">
+        <div class="h-9 w-9 rounded-lg bg-rose-500 text-white flex items-center justify-center shrink-0 pulse-alarm shadow-md">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <div class="flex-1 font-mono">
+          <div class="text-xs font-bold text-rose-900 flex items-center justify-between">
+            <span>CRITICAL DEFECT DETECTED: SPLICE #04 INTERNAL CORD RUPTURE</span>
+            <span class="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded font-bold">ALARM CLASS 1</span>
+          </div>
+          <p class="text-[11px] text-rose-800 mt-1 leading-relaxed">
+            Station 20+00: MFL scanner detects 4 consecutive severed steel cords (Cord #42-#45). Acoustic transient burst 0.84V RMS. Thermal friction rise +20.5°C on carrying belt underside.
+          </p>
+          <div class="flex gap-2 mt-2.5">
+            <button id="btn-focus-fault" class="px-3 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 text-xs font-bold transition shadow-xs">Isolate 3D Defect Mesh</button>
+            <button id="btn-dismiss-alarm" class="px-3 py-1 rounded bg-white text-slate-700 hover:bg-slate-100 text-xs font-semibold border border-slate-300">Dismiss Visual</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- =====================================================================
+     BOTTOM SYNOPTIC CHAINAGE STRIP
+====================================================================== -->
+<footer class="h-24 bg-white border-t border-slate-200 z-40 flex flex-col shrink-0 shadow-sm">
+  <div class="px-4 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-mono">
+    <div class="flex items-center gap-3">
+      <span class="text-slate-600 uppercase text-[10px] tracking-wider font-bold">2D Linear Conveyor Chainage & Plant Schematic (4.85 km)</span>
+      <span class="text-slate-300">|</span>
+      <span class="text-[11px] text-slate-600">Splice Cycle: <span class="text-amber-700 font-bold">14m 28s</span></span>
+    </div>
+    <div class="flex items-center gap-4 text-[11px]">
+      <span class="flex items-center gap-1 text-slate-700"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Splice #01 - OK</span>
+      <span class="flex items-center gap-1 text-slate-700"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Splice #02 - OK</span>
+      <span class="flex items-center gap-1 text-slate-700"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Splice #03 - OK</span>
+      <span class="flex items-center gap-1 text-slate-700"><span id="splice4-synoptic-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span> Splice #04 - <span id="splice4-status-label" class="font-bold text-emerald-600">OK</span></span>
+    </div>
+  </div>
+
+  <div class="flex-1 px-4 flex items-center justify-center">
+    <div class="w-full relative h-8 bg-slate-100 rounded-lg border border-slate-300 flex items-center px-2 shadow-inner">
+      <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2.5 bg-slate-300 rounded"></div>
+      <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1.5 bg-amber-600/70 rounded"></div>
+
+      <div class="absolute left-[3%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('tippler')">
+        <span class="w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Wagon Tippler</span>
+      </div>
+
+      <div class="absolute left-[20%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('crusher')">
+        <span class="w-3.5 h-3.5 rounded-full bg-slate-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Primary Crusher</span>
+      </div>
+
+      <div class="absolute left-[40%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('stockyard')">
+        <span class="w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Stockyard Stacker</span>
+      </div>
+
+      <div class="absolute left-[60%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('sensors')">
+        <span id="synoptic-sensor-marker" class="w-3.5 h-3.5 rounded-full bg-cyan-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Defect Array</span>
+      </div>
+
+      <div class="absolute left-[80%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('drive')">
+        <span class="w-3.5 h-3.5 rounded-full bg-slate-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Drive Station</span>
+      </div>
+
+      <div class="absolute left-[95%] -top-1.5 flex flex-col items-center cursor-pointer" onclick="triggerWaypoint('secondary')">
+        <span class="w-3.5 h-3.5 rounded-full bg-slate-500 border-2 border-white shadow-xs"></span>
+        <span class="text-[9px] font-mono text-slate-600 font-bold mt-0.5">Secondary Sizer</span>
+      </div>
+
+      <div id="synoptic-sp4" class="absolute left-[62%] top-1/2 -translate-y-1/2 -translate-x-1/2 cursor-pointer z-10" onclick="triggerWaypoint('sensors')">
+        <div id="synoptic-sp4-pill" class="h-5 w-4 bg-emerald-600 rounded border border-white flex items-center justify-center text-[9px] font-bold text-white font-mono shadow-xs">S4</div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- =====================================================================
+     THREE.JS 3D ENGINE & CONTROLLER SCRIPT
+====================================================================== -->
+<script>
+lucide.createIcons();
+
+const state = {
+  cameraMode: 'orbit',
+  anomalyActive: false,
+  selectedSensorTab: 'mfl',
+  keys: {},
+  yaw: Math.PI / 2,
+  pitch: 0,
+  tween: null,
+  tph: 8450,
+  speed: 5.2,
+  powerKw: 1894,
+  walkPos: new THREE.Vector3(-80, 4.0, 3.2),
+};
+
+/* ---------------------------------------------------------------------
+   RENDERER & SCENE SETUP
+--------------------------------------------------------------------- */
+const canvas = document.getElementById('scene-canvas');
+const container = document.getElementById('viewport-container');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf1f5f9);
+scene.fog = new THREE.Fog(0xf1f5f9, 140, 450);
+
+const camera = new THREE.PerspectiveCamera(46, 1, 0.2, 1200);
+// Focus directly on the Fixed Sensor Array Zone (Sta 20) on load
+camera.position.set(12, 11, 19);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxPolarAngle = Math.PI * 0.485;
+controls.minDistance = 2;
+controls.maxDistance = 320;
+controls.target.set(20, 3.5, 0);
+controls.update();
+
+function handleResize() {
+  const w = container.clientWidth || window.innerWidth - 352;
+  const h = container.clientHeight || window.innerHeight - 152;
+  if (w > 0 && h > 0) {
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+}
+handleResize();
+window.addEventListener('resize', handleResize);
+
+// Studio Lighting
+scene.add(new THREE.HemisphereLight(0xffffff, 0xdfe7f2, 1.0));
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+const sunLight = new THREE.DirectionalLight(0xfffdfa, 1.4);
+sunLight.position.set(-60, 95, 75);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = -160;
+sunLight.shadow.camera.right = 160;
+sunLight.shadow.camera.top = 100;
+sunLight.shadow.camera.bottom = -100;
+sunLight.shadow.bias = -0.0003;
+scene.add(sunLight);
+
+// Ground
+const groundFloor = new THREE.Mesh(
+  new THREE.PlaneGeometry(800, 400),
+  new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9, metalness: 0.05 })
+);
+groundFloor.rotation.x = -Math.PI / 2;
+groundFloor.receiveShadow = true;
+scene.add(groundFloor);
+
+/* ---------------------------------------------------------------------
+   HIGH-VISIBILITY BELT TEXTURE (HIGH-CONTRAST INDUSTRIAL MOTION CHEVRONS)
+--------------------------------------------------------------------- */
+const BELT_REPEAT_X = 24;
+
+function createHighContrastRubberBeltTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 512;
+  cv.height = 128;
+  const ctx = cv.getContext('2d');
+
+  // Base vulcanized rubber
+  ctx.fillStyle = '#1e2430';
+  ctx.fillRect(0, 0, 512, 128);
+
+  // Alternating friction ribbed bands across length
+  for (let x = 0; x < 512; x += 32) {
+    ctx.fillStyle = (x % 64 === 0) ? '#151a22' : '#283244';
+    ctx.fillRect(x, 0, 16, 128);
+  }
+
+  // Heavy-Duty High-Contrast Herringbone / Chevron Cleats
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let x = 0; x < 512; x += 32) {
+    ctx.beginPath();
+    ctx.moveTo(x, 10);
+    ctx.lineTo(x + 22, 64);
+    ctx.lineTo(x, 118);
+    ctx.stroke();
+  }
+
+  // Bold Safety-Yellow Edge Dash Markers (Unmistakable motion cues)
+  ctx.fillStyle = '#f59e0b';
+  for (let x = 0; x < 512; x += 48) {
+    ctx.fillRect(x + 6, 3, 20, 5);    // Top edge
+    ctx.fillRect(x + 6, 120, 20, 5);  // Bottom edge
+  }
+
+  // Cyan Center Guidance Tracking Line
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 14]);
+  ctx.beginPath();
+  ctx.moveTo(0, 64);
+  ctx.lineTo(512, 64);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(BELT_REPEAT_X, 1);
+  return tex;
+}
+
+const carryingBeltTex = createHighContrastRubberBeltTexture();
+const returnBeltTex   = createHighContrastRubberBeltTexture();
+const headWrapTex     = createHighContrastRubberBeltTexture();
+const tailWrapTex     = createHighContrastRubberBeltTexture();
+
+headWrapTex.repeat.set(1.2, 1);
+tailWrapTex.repeat.set(1.2, 1);
+
+function createIronOreTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 512;
+  cv.height = 128;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#6b2413';
+  ctx.fillRect(0, 0, 512, 128);
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * 512, y = Math.random() * 128, r = 2 + Math.random() * 5;
+    ctx.fillStyle = (i % 3 === 0) ? '#3d1207' : (i % 2 === 0 ? '#8e2f17' : '#b84323');
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(BELT_REPEAT_X, 1);
+  return tex;
+}
+const oreTexture = createIronOreTexture();
+
+/* ---------------------------------------------------------------------
+   MATERIALS
+--------------------------------------------------------------------- */
+const MAT = {
+  galvSteel: new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.35 }),
+  darkSteelFrame: new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.65, roughness: 0.45 }),
+  concreteBase: new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9, metalness: 0.1 }),
+  motorYellow: new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.3, roughness: 0.35 }),
+  idlerOrange: new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.4, roughness: 0.4 }),
+  bearingWhite: new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.3, roughness: 0.5 }),
+  pulleyDrumSteel: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.25 }),
+  hopperChuteMat: new THREE.MeshStandardMaterial({ color: 0xcfd8e3, metalness: 0.5, roughness: 0.3, side: THREE.DoubleSide }),
+  catwalkMesh: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.3 }),
+  rubberCarrying: new THREE.MeshStandardMaterial({ map: carryingBeltTex, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide }),
+  rubberReturn: new THREE.MeshStandardMaterial({ map: returnBeltTex, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide }),
+  rubberHeadWrap: new THREE.MeshStandardMaterial({ map: headWrapTex, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide }),
+  rubberTailWrap: new THREE.MeshStandardMaterial({ map: tailWrapTex, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide }),
+  ironOreBulk: new THREE.MeshStandardMaterial({ map: oreTexture, roughness: 0.95, metalness: 0.05, side: THREE.DoubleSide }),
+  sensorCyan: new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.5, roughness: 0.3 }),
+  sensorEmerald: new THREE.MeshStandardMaterial({ color: 0x059669, metalness: 0.5, roughness: 0.3 }),
+  cameraHousing: new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 }),
+  thermalLens: new THREE.MeshStandardMaterial({ color: 0xe11d48, metalness: 0.9, roughness: 0.1 }),
+  wagonMat: new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.7, metalness: 0.3 }),
+  cablesBlack: new THREE.MeshBasicMaterial({ color: 0x0f172a }),
+  frustumMat: new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+};
+
+/* ---------------------------------------------------------------------
+   CONVEYOR GEOMETRY PARAMETERS
+--------------------------------------------------------------------- */
+const CV = {
+  xStart: -75,
+  xEnd: 75,
+  topY: 3.4,
+  botY: 1.2,
+  wCenter: 0.45,
+  wWing: 0.55,
+  angleDeg: 35,
+  pulleyR: 1.1
+};
+const spanLen = CV.xEnd - CV.xStart;
+const wingAngleRad = CV.angleDeg * Math.PI / 180;
+const wingRise = Math.sin(wingAngleRad) * CV.wWing;
+const wingRun = Math.cos(wingAngleRad) * CV.wWing;
+const beltHalfWidth = CV.wCenter + wingRun;
+const pulleyCenterY = (CV.topY + CV.botY) / 2;
+
+/* ---------------------------------------------------------------------
+   1. 35° TROUGHED CARRYING BELT (TOP STRAND)
+--------------------------------------------------------------------- */
+function createTroughedCarryingBelt() {
+  const nx = 180, nz = 16;
+  const geo = new THREE.BufferGeometry();
+  const vertices = [], uvs = [], indices = [];
+
+  for (let ix = 0; ix <= nx; ix++) {
+    const x = CV.xStart + (ix / nx) * spanLen;
+    const u = (ix / nx) * BELT_REPEAT_X;
+
+    for (let iz = 0; iz <= nz; iz++) {
+      const zFrac = (iz / nz) * 2 - 1;
+      const z = zFrac * beltHalfWidth;
+      const absZ = Math.abs(z);
+
+      let y = CV.topY + 0.08;
+      if (absZ > CV.wCenter) {
+        y += (absZ - CV.wCenter) * Math.tan(wingAngleRad);
+      }
+
+      vertices.push(x, y, z);
+      uvs.push(u, iz / nz);
+    }
+  }
+
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      const a = ix * (nz + 1) + iz;
+      const b = (ix + 1) * (nz + 1) + iz;
+      const c = (ix + 1) * (nz + 1) + (iz + 1);
+      const d = ix * (nz + 1) + (iz + 1);
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geo, MAT.rubberCarrying);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+const troughedCarryingBelt = createTroughedCarryingBelt();
+scene.add(troughedCarryingBelt);
+
+/* ---------------------------------------------------------------------
+   2. HEAPED BULK IRON ORE (TOP TROUGH STREAM)
+--------------------------------------------------------------------- */
+function createHeapedOreMesh() {
+  const nx = 180, nz = 14;
+  const geo = new THREE.BufferGeometry();
+  const vertices = [], uvs = [], indices = [];
+  const oreHalfWidth = beltHalfWidth * 0.88;
+
+  for (let ix = 0; ix <= nx; ix++) {
+    const x = CV.xStart + (ix / nx) * spanLen;
+    const u = (ix / nx) * BELT_REPEAT_X;
+
+    for (let iz = 0; iz <= nz; iz++) {
+      const zFrac = (iz / nz) * 2 - 1;
+      const z = zFrac * oreHalfWidth;
+      const absZ = Math.abs(z);
+
+      let beltY = CV.topY + 0.08;
+      if (absZ > CV.wCenter) {
+        beltY += (absZ - CV.wCenter) * Math.tan(wingAngleRad);
+      }
+      const heapHeight = Math.max(0, 0.32 * (1 - Math.pow(z / oreHalfWidth, 2)));
+      const y = beltY + heapHeight + 0.02;
+
+      vertices.push(x, y, z);
+      uvs.push(u, iz / nz);
+    }
+  }
+
+  for (let ix = 0; ix < nx; ix++) {
+    for (let iz = 0; iz < nz; iz++) {
+      const a = ix * (nz + 1) + iz;
+      const b = (ix + 1) * (nz + 1) + iz;
+      const c = (ix + 1) * (nz + 1) + (iz + 1);
+      const d = ix * (nz + 1) + (iz + 1);
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geo, MAT.ironOreBulk);
+  mesh.castShadow = true;
+  return mesh;
+}
+const ironOreStreamMesh = createHeapedOreMesh();
+scene.add(ironOreStreamMesh);
+
+/* ---------------------------------------------------------------------
+   3. FLAT RETURN STRAND & 180° DRUM WRAPS (FULLY SYNCHRONIZED RUNNING)
+--------------------------------------------------------------------- */
+const returnBeltGeo = new THREE.PlaneGeometry(spanLen, beltHalfWidth * 1.9, 140, 4);
+const returnBeltMesh = new THREE.Mesh(returnBeltGeo, MAT.rubberReturn);
+returnBeltMesh.position.set((CV.xStart + CV.xEnd) / 2, CV.botY, 0);
+returnBeltMesh.rotation.x = Math.PI / 2;
+returnBeltMesh.receiveShadow = true;
+scene.add(returnBeltMesh);
+
+const headWrapGeo = new THREE.CylinderGeometry(
+  CV.pulleyR, CV.pulleyR, beltHalfWidth * 1.9, 32, 1, true, -Math.PI / 2, Math.PI
+);
+const headWrapMesh = new THREE.Mesh(headWrapGeo, MAT.rubberHeadWrap);
+headWrapMesh.position.set(CV.xEnd, pulleyCenterY, 0);
+headWrapMesh.rotation.x = Math.PI / 2;
+scene.add(headWrapMesh);
+
+const tailWrapGeo = new THREE.CylinderGeometry(
+  CV.pulleyR, CV.pulleyR, beltHalfWidth * 1.9, 32, 1, true, Math.PI / 2, Math.PI
+);
+const tailWrapMesh = new THREE.Mesh(tailWrapGeo, MAT.rubberTailWrap);
+tailWrapMesh.position.set(CV.xStart, pulleyCenterY, 0);
+tailWrapMesh.rotation.x = Math.PI / 2;
+scene.add(tailWrapMesh);
+
+// Pulley Drums with Bearings
+function buildPulleyDrum(x) {
+  const g = new THREE.Group();
+  g.position.set(x, pulleyCenterY, 0);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(CV.pulleyR - 0.02, CV.pulleyR - 0.02, beltHalfWidth * 2.1, 32), MAT.pulleyDrumSteel);
+  drum.rotation.x = Math.PI / 2;
+  drum.castShadow = true;
+  g.add(drum);
+
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, beltHalfWidth * 2.8, 16), MAT.galvSteel);
+  shaft.rotation.x = Math.PI / 2;
+  g.add(shaft);
+
+  [-beltHalfWidth - 0.35, beltHalfWidth + 0.35].forEach(z => {
+    const bearing = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.22), MAT.bearingWhite);
+    bearing.position.set(0, 0, z);
+    bearing.castShadow = true;
+    g.add(bearing);
+  });
+  return g;
+}
+scene.add(buildPulleyDrum(CV.xEnd));
+scene.add(buildPulleyDrum(CV.xStart));
+
+/* ---------------------------------------------------------------------
+   4. 3-ROLL TROUGHING IDLERS (STATIONARY ON FRAME)
+--------------------------------------------------------------------- */
+const idlerGroup = new THREE.Group();
+scene.add(idlerGroup);
+
+function build3RollTroughIdlerSet(x) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, 0);
+
+  const transom = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, beltHalfWidth * 2.2), MAT.darkSteelFrame);
+  transom.position.set(0, CV.topY - 0.2, 0);
+  g.add(transom);
+
+  const centerRoll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, CV.wCenter * 2, 18), MAT.idlerOrange);
+  centerRoll.rotation.x = Math.PI / 2;
+  centerRoll.position.set(0, CV.topY, 0);
+  centerRoll.castShadow = true;
+  g.add(centerRoll);
+
+  const leftWing = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, CV.wWing, 18), MAT.idlerOrange);
+  leftWing.rotation.x = wingAngleRad + Math.PI / 2;
+  leftWing.position.set(0, CV.topY + (wingRise / 2), -(CV.wCenter + (wingRun / 2)));
+  leftWing.castShadow = true;
+  g.add(leftWing);
+
+  const rightWing = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, CV.wWing, 18), MAT.idlerOrange);
+  rightWing.rotation.x = -wingAngleRad + Math.PI / 2;
+  rightWing.position.set(0, CV.topY + (wingRise / 2), (CV.wCenter + (wingRun / 2)));
+  rightWing.castShadow = true;
+  g.add(rightWing);
+
+  const retRoll = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, beltHalfWidth * 2.1, 16), MAT.galvSteel);
+  retRoll.rotation.x = Math.PI / 2;
+  retRoll.position.set(0, CV.botY - 0.09, 0);
+  g.add(retRoll);
+
+  return g;
+}
+
+for (let x = CV.xStart + 3; x <= CV.xEnd - 3; x += 3.0) {
+  idlerGroup.add(build3RollTroughIdlerSet(x));
+}
+
+/* ---------------------------------------------------------------------
+   5. PLANT PROCESS: ANIMATED ROTARY TIPPLER, CRUSHER & DRIVE
+--------------------------------------------------------------------- */
+// A. ROTARY WAGON TIPPLER DUMPER SYSTEM (ANIMATED CONTINUOUS ROTATION)
+const tipplerGroup = new THREE.Group();
+tipplerGroup.position.set(-110, 0, 0);
+scene.add(tipplerGroup);
+
+// Railroad Ground Tracks
+const trackRail1 = new THREE.Mesh(new THREE.BoxGeometry(40, 0.15, 0.15), MAT.galvSteel);
+trackRail1.position.set(0, 0.15, -1.2); tipplerGroup.add(trackRail1);
+const trackRail2 = new THREE.Mesh(new THREE.BoxGeometry(40, 0.15, 0.15), MAT.galvSteel);
+trackRail2.position.set(0, 0.15, 1.2); tipplerGroup.add(trackRail2);
+
+// Rotary Tippler Rotating Barrel Cage Assembly
+const tipplerBarrel = new THREE.Group();
+tipplerBarrel.position.set(0, 3.4, 0);
+tipplerGroup.add(tipplerBarrel);
+
+const tipplerRing1 = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.28, 16, 32), MAT.darkSteelFrame);
+tipplerRing1.rotation.y = Math.PI / 2; tipplerRing1.position.set(-4, 0, 0); tipplerBarrel.add(tipplerRing1);
+const tipplerRing2 = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.28, 16, 32), MAT.darkSteelFrame);
+tipplerRing2.rotation.y = Math.PI / 2; tipplerRing2.position.set(4, 0, 0); tipplerBarrel.add(tipplerRing2);
+
+// Wagon clamped inside the rotary barrel
+const wagonInBarrel = new THREE.Mesh(new THREE.BoxGeometry(9.5, 2.2, 2.6), MAT.wagonMat);
+wagonInBarrel.position.set(0, -1.5, 0);
+wagonInBarrel.castShadow = true;
+tipplerBarrel.add(wagonInBarrel);
+
+const oreInWagon = new THREE.Mesh(new THREE.ConeGeometry(1.2, 0.8, 8), MAT.ironOreBulk);
+oreInWagon.position.set(0, -0.4, 0);
+tipplerBarrel.add(oreInWagon);
+
+// Waiting Wagon on Track
+const waitingWagon = new THREE.Mesh(new THREE.BoxGeometry(10, 2.4, 2.8), MAT.wagonMat);
+waitingWagon.position.set(-14, 1.6, 0);
+tipplerGroup.add(waitingWagon);
+
+// Deep Underground Track Hopper under Tippler
+const trackHopper = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 1.8, 4.2, 4), MAT.hopperChuteMat);
+trackHopper.position.set(0, 0.2, 0);
+trackHopper.rotation.y = Math.PI / 4;
+tipplerGroup.add(trackHopper);
+
+// B. Primary Crusher Station
+const crusherGroup = new THREE.Group();
+crusherGroup.position.set(-90, 0, 0);
+scene.add(crusherGroup);
+
+const crusherTower = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 8), MAT.darkSteelFrame);
+crusherTower.position.set(6, 6, -8);
+crusherTower.castShadow = true;
+crusherGroup.add(crusherTower);
+
+const crusherChute = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.1, 4.0, 4), MAT.hopperChuteMat);
+crusherChute.position.set(12, CV.topY + 2.2, 0);
+crusherChute.rotation.y = Math.PI / 4;
+crusherGroup.add(crusherChute);
+
+// C. Head Drive Terminal
+const headDriveGroup = new THREE.Group();
+headDriveGroup.position.set(CV.xEnd, pulleyCenterY, 0);
+scene.add(headDriveGroup);
+
+const yellowHood = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 2.4), MAT.motorYellow);
+yellowHood.position.set(-0.5, 1.6, -1.8);
+yellowHood.castShadow = true;
+headDriveGroup.add(yellowHood);
+
+const dischargeChute = new THREE.Mesh(new THREE.BoxGeometry(3.2, 5.0, 2.8), MAT.hopperChuteMat);
+dischargeChute.position.set(2.0, -1.0, 0);
+headDriveGroup.add(dischargeChute);
+
+// D. Secondary Sizer / Transfer Tower
+const transferHouse = new THREE.Group();
+transferHouse.position.set(95, 0, 0);
+scene.add(transferHouse);
+
+const transferBldg = new THREE.Mesh(new THREE.BoxGeometry(14, 20, 12), MAT.darkSteelFrame);
+transferBldg.position.set(0, 10, -6);
+transferBldg.castShadow = true;
+transferHouse.add(transferBldg);
+
+/* ---------------------------------------------------------------------
+   6. STOCKYARD RADIAL STACKER SYSTEM
+--------------------------------------------------------------------- */
+const stockyardGroup = new THREE.Group();
+stockyardGroup.position.set(-20, 0, -28);
+scene.add(stockyardGroup);
+
+function createStockpile(x, z, r, h) {
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 32), MAT.ironOreBulk);
+  cone.position.set(x, h / 2, z);
+  cone.castShadow = true;
+  return cone;
+}
+stockyardGroup.add(createStockpile(-20, -14, 15, 8.5));
+stockyardGroup.add(createStockpile(12, -18, 17, 9.5));
+stockyardGroup.add(createStockpile(42, -14, 14, 7.5));
+
+const stackerBase = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.8, 1.4, 24), MAT.concreteBase);
+stackerBase.position.set(0, 0.7, 0);
+stockyardGroup.add(stackerBase);
+
+const slewingRing = new THREE.Mesh(new THREE.TorusGeometry(4.2, 0.25, 12, 32), MAT.darkSteelFrame);
+slewingRing.rotation.x = Math.PI / 2;
+slewingRing.position.set(0, 1.4, 0);
+stockyardGroup.add(slewingRing);
+
+const towerMast = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.6, 12, 16), MAT.darkSteelFrame);
+towerMast.position.set(0, 7.4, 0);
+stockyardGroup.add(towerMast);
+
+const aFrameApex = new THREE.Mesh(new THREE.ConeGeometry(1.8, 4.5, 4), MAT.galvSteel);
+aFrameApex.position.set(0, 15.5, 0);
+aFrameApex.rotation.y = Math.PI / 4;
+stockyardGroup.add(aFrameApex);
+
+const boomGroup = new THREE.Group();
+boomGroup.position.set(0, 7.5, 0);
+stockyardGroup.add(boomGroup);
+
+const stackerBoomMesh = new THREE.Mesh(new THREE.BoxGeometry(32, 1.4, 1.6), MAT.motorYellow);
+stackerBoomMesh.position.set(15, 3.5, -8);
+stackerBoomMesh.rotation.z = -0.22;
+stackerBoomMesh.rotation.y = -0.45;
+stackerBoomMesh.castShadow = true;
+boomGroup.add(stackerBoomMesh);
+
+const counterArm = new THREE.Mesh(new THREE.BoxGeometry(10, 1.0, 1.2), MAT.darkSteelFrame);
+counterArm.position.set(-4.5, 1.0, 3.5);
+counterArm.rotation.y = -0.45;
+boomGroup.add(counterArm);
+
+const counterWeightBox = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.4, 2.8), MAT.motorYellow);
+counterWeightBox.position.set(-8.5, 2.0, 6.0);
+boomGroup.add(counterWeightBox);
+
+function createCable(p1, p2) {
+  const path = new THREE.LineCurve3(p1, p2);
+  const tubeGeo = new THREE.TubeGeometry(path, 1, 0.05, 6, false);
+  return new THREE.Mesh(tubeGeo, MAT.cablesBlack);
+}
+stockyardGroup.add(createCable(new THREE.Vector3(0, 17.5, 0), new THREE.Vector3(15, 11, -8)));
+stockyardGroup.add(createCable(new THREE.Vector3(0, 17.5, 0), new THREE.Vector3(-8.5, 9.5, 6)));
+
+/* ---------------------------------------------------------------------
+   7. MULTI-CAMERA GANTRIES & SENSOR SUITE (FIXED & MONITORING BELT)
+--------------------------------------------------------------------- */
+const sensorsList = [];
+const sensorNodes = {};
+const cameraFrustums = [];
+
+// SENSOR 1: MFL Steel-Cord Sensor (Fixed Underneath Return Strand)
+const mflGroup = new THREE.Group();
+mflGroup.position.set(20, CV.botY - 0.35, 0);
+
+const mflBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, beltHalfWidth * 1.8), MAT.sensorCyan);
+mflBody.castShadow = true;
+mflGroup.add(mflBody);
+
+const mflStand = new THREE.Mesh(new THREE.BoxGeometry(0.15, CV.botY - 0.35, 0.15), MAT.darkSteelFrame);
+mflStand.position.set(0, -(CV.botY - 0.35) / 2, 0);
+mflGroup.add(mflStand);
+
+[-beltHalfWidth * 0.7, beltHalfWidth * 0.7].forEach(z => {
+  const pole = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.15, 0.25), MAT.cameraHousing);
+  pole.position.set(0, 0.25, z);
+  mflGroup.add(pole);
+});
+
+const mflRing = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.6, 20), new THREE.MeshBasicMaterial({ color: 0x0284c7, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }));
+mflRing.rotation.x = Math.PI / 2;
+mflRing.position.set(0, -0.25, 0);
+mflGroup.add(mflRing);
+mflGroup.userData = { id: 'MFL-RET-04', name: 'MFL Steel-Cord Scanner', mount: 'Return Strand Underneath (Fixed)', type: 'mfl', ring: mflRing };
+scene.add(mflGroup);
+sensorsList.push(mflGroup);
+sensorNodes['mfl'] = mflGroup;
+
+// SENSOR 2: Acoustic Emission (AE) Sensor (Fixed on Return Idler Stool)
+const aeGroup = new THREE.Group();
+aeGroup.position.set(18, CV.botY + 0.25, 1.25);
+
+const aeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.25, 16), MAT.sensorEmerald);
+aeBody.rotation.z = Math.PI / 2;
+aeBody.castShadow = true;
+aeGroup.add(aeBody);
+
+const aeClamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.15), MAT.darkSteelFrame);
+aeClamp.position.set(0, -0.15, 0);
+aeGroup.add(aeClamp);
+
+const aeRing = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.45, 20), new THREE.MeshBasicMaterial({ color: 0x059669, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }));
+aeRing.rotation.x = Math.PI / 2;
+aeGroup.add(aeRing);
+aeGroup.userData = { id: 'AE-IDLER-28', name: 'Acoustic Stress Transducer', mount: 'Return Idler Transom Stool (Fixed)', type: 'ae', ring: aeRing };
+scene.add(aeGroup);
+sensorsList.push(aeGroup);
+sensorNodes['ae'] = aeGroup;
+
+// SENSOR 3: Fixed Overhead RGB AI Camera Gantry (Overlooking Top View)
+const rgbCamGroup = new THREE.Group();
+rgbCamGroup.position.set(22, CV.topY + 2.8, 1.7);
+
+const rgbMast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 12), MAT.darkSteelFrame);
+rgbMast.position.set(0, -1.2, 0);
+rgbCamGroup.add(rgbMast);
+
+const rgbArm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.9), MAT.darkSteelFrame);
+rgbArm.position.set(0, 0.2, -0.4);
+rgbCamGroup.add(rgbArm);
+
+const rgbEnclosure = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.45), MAT.cameraHousing);
+rgbEnclosure.position.set(0, 0.15, -0.85);
+rgbEnclosure.rotation.x = 0.55;
+rgbEnclosure.castShadow = true;
+rgbCamGroup.add(rgbEnclosure);
+
+const rgbLens = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16), MAT.galvSteel);
+rgbLens.rotation.x = Math.PI / 2;
+rgbLens.position.set(0, 0, -0.25);
+rgbEnclosure.add(rgbLens);
+
+// Visual Camera Field of View Frustum Cone (Top to Belt Surface)
+const rgbFrustum = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.8, 4), MAT.frustumMat);
+rgbFrustum.position.set(0, -1.2, -0.85);
+rgbFrustum.rotation.x = Math.PI + 0.35;
+rgbCamGroup.add(rgbFrustum);
+cameraFrustums.push(rgbFrustum);
+
+const rgbRing = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 20), new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }));
+rgbRing.rotation.x = Math.PI / 2;
+rgbRing.position.set(0, -0.2, -0.85);
+rgbCamGroup.add(rgbRing);
+rgbCamGroup.userData = { id: 'RGB-CAM-TOP-01', name: 'RGB Optical AI Camera', mount: 'Overhead Side Mast (Fixed Top View)', type: 'rgb', ring: rgbRing };
+scene.add(rgbCamGroup);
+sensorsList.push(rgbCamGroup);
+sensorNodes['rgb'] = rgbCamGroup;
+
+// SENSOR 4: Fixed Radiometric Thermal IR Camera Gantry (Opposite Side Overlooking Top View)
+const thermalCamGroup = new THREE.Group();
+thermalCamGroup.position.set(22, CV.topY + 2.8, -1.7);
+
+const thMast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 12), MAT.darkSteelFrame);
+thMast.position.set(0, -1.2, 0);
+thermalCamGroup.add(thMast);
+
+const thArm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.9), MAT.darkSteelFrame);
+thArm.position.set(0, 0.2, 0.4);
+thermalCamGroup.add(thArm);
+
+const thEnclosure = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.45), MAT.cameraHousing);
+thEnclosure.position.set(0, 0.15, 0.85);
+thEnclosure.rotation.x = -0.55;
+thEnclosure.castShadow = true;
+thermalCamGroup.add(thEnclosure);
+
+const thLens = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16), MAT.thermalLens);
+thLens.rotation.x = Math.PI / 2;
+thLens.position.set(0, 0, 0.25);
+thEnclosure.add(thLens);
+
+const thFrustum = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.8, 4), new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.15, side: THREE.DoubleSide }));
+thFrustum.position.set(0, -1.2, 0.85);
+thFrustum.rotation.x = Math.PI - 0.35;
+thermalCamGroup.add(thFrustum);
+cameraFrustums.push(thFrustum);
+
+const thRing = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 20), new THREE.MeshBasicMaterial({ color: 0xe11d48, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }));
+thRing.rotation.x = Math.PI / 2;
+thRing.position.set(0, -0.2, 0.85);
+thermalCamGroup.add(thRing);
+thermalCamGroup.userData = { id: 'TH-CAM-TOP-02', name: 'FLIR Radiometric Thermal IR Camera', mount: 'Overhead Side Mast (Fixed Top View)', type: 'thermal', ring: thRing };
+scene.add(thermalCamGroup);
+sensorsList.push(thermalCamGroup);
+sensorNodes['thermal'] = thermalCamGroup;
+
+// Splice Joint Condition Monitoring Nodes (Splice #01 to #04)
+const splicesList = [];
+const spliceLocations = [ -45, -15, 20, 55 ];
+
+spliceLocations.forEach((fixedX, idx) => {
+  const isSplice4 = (idx === 2); // Splice #04 is monitored at the sensor station x=20
+  const spliceMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.05, beltHalfWidth * 1.95),
+    new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4, emissive: 0x000000 })
+  );
+  spliceMesh.position.set(fixedX, CV.topY + 0.09, 0);
+  scene.add(spliceMesh);
+
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(0.8, 1.4, 24),
+    new THREE.MeshBasicMaterial({ color: 0x059669, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.set(fixedX, CV.botY - 0.08, 0);
+  scene.add(halo);
+
+  splicesList.push({ id: `SPLICE-0${idx+1}`, xPos: fixedX, mesh: spliceMesh, halo, isSplice4 });
+});
+
+/* ---------------------------------------------------------------------
+   8. REAL-TIME 3D BELT DEFECT MESH (EXPOSED CORDS & SURFACE TEAR)
+--------------------------------------------------------------------- */
+const defectMeshGroup = new THREE.Group();
+defectMeshGroup.position.set(20, CV.topY + 0.12, 0);
+defectMeshGroup.visible = false; // Triggered on Anomaly Simulation
+scene.add(defectMeshGroup);
+
+// Longitudinal belt split & tear tear-line
+const defectTear = new THREE.Mesh(
+  new THREE.BoxGeometry(2.4, 0.06, 0.45),
+  new THREE.MeshStandardMaterial({ color: 0x881337, roughness: 0.2, emissive: 0xbe123c, emissiveIntensity: 0.6 })
+);
+defectMeshGroup.add(defectTear);
+
+// Exposed Severed Steel Cords
+for (let c = -0.15; c <= 0.15; c += 0.08) {
+  const cord = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.018, 1.8, 8),
+    new THREE.MeshStandardMaterial({ color: 0xffe4e6, metalness: 0.9, roughness: 0.2 })
+  );
+  cord.rotation.z = Math.PI / 2;
+  cord.position.set(0, 0.03, c);
+  defectMeshGroup.add(cord);
+}
+
+// Thermal Hotspot Glow Sphere under defect
+const defectHotspot = new THREE.Mesh(
+  new THREE.SphereGeometry(0.65, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.45 })
+);
+defectHotspot.position.set(0, -0.2, 0);
+defectMeshGroup.add(defectHotspot);
+
+/* ---------------------------------------------------------------------
+   9. LIVE PIP CAMERA STREAM SIMULATION (RGB CRACK SCAN & THERMAL IR)
+--------------------------------------------------------------------- */
+const pipCanvas = document.getElementById('pipCanvas');
+const pipCtx = pipCanvas.getContext('2d');
+let pipPhase = 0;
+
+function renderPipFeed() {
+  pipPhase += 0.05;
+  const w = pipCanvas.width, h = pipCanvas.height;
+
+  if (state.selectedSensorTab === 'thermal') {
+    // Radiometric False-Color IronBow Thermal IR Stream
+    pipCtx.fillStyle = '#0b001a';
+    pipCtx.fillRect(0, 0, w, h);
+    pipCtx.fillStyle = '#49006a';
+    pipCtx.fillRect(30, 20, w - 60, h - 40);
+
+    if (state.anomalyActive) {
+      // High-intensity thermal friction hotspot at defect location
+      const gradDefect = pipCtx.createRadialGradient(w / 2, 55, 4, w / 2, 55, 38);
+      gradDefect.addColorStop(0, '#ffffff');
+      gradDefect.addColorStop(0.3, '#ff0055');
+      gradDefect.addColorStop(0.7, '#d95f0e');
+      gradDefect.addColorStop(1, 'transparent');
+      pipCtx.fillStyle = gradDefect;
+      pipCtx.beginPath(); pipCtx.arc(w / 2, 55, 38, 0, Math.PI * 2); pipCtx.fill();
+    } else {
+      for (let i = 0; i < 6; i++) {
+        const ox = ((i * 40 + pipPhase * 30) % (w - 70)) + 35;
+        const grad = pipCtx.createRadialGradient(ox, 55, 2, ox, 55, 22);
+        grad.addColorStop(0, '#fec44f');
+        grad.addColorStop(0.6, '#d95f0e');
+        grad.addColorStop(1, 'transparent');
+        pipCtx.fillStyle = grad;
+        pipCtx.beginPath(); pipCtx.arc(ox, 55, 22, 0, Math.PI * 2); pipCtx.fill();
+      }
+    }
+  } else {
+    // Optical 4K RGB AI Surface Inspection Stream
+    pipCtx.fillStyle = '#1e293b';
+    pipCtx.fillRect(0, 0, w, h);
+    pipCtx.fillStyle = '#0f172a';
+    pipCtx.fillRect(25, 15, w - 50, h - 30);
+
+    if (state.anomalyActive) {
+      // AI Bounding Box & Longitudinal Crack Visualization
+      pipCtx.strokeStyle = '#ef4444';
+      pipCtx.lineWidth = 2;
+      pipCtx.strokeRect(w / 2 - 35, 30, 70, 50);
+
+      pipCtx.fillStyle = '#ef4444';
+      pipCtx.font = 'bold 9px monospace';
+      pipCtx.fillText('DEFECT: 98.2% RIP', w / 2 - 35, 26);
+
+      // Jagged crack line
+      pipCtx.strokeStyle = '#ffffff';
+      pipCtx.lineWidth = 3;
+      pipCtx.beginPath();
+      pipCtx.moveTo(w / 2 - 25, 55);
+      pipCtx.lineTo(w / 2 - 10, 48);
+      pipCtx.lineTo(w / 2 + 8, 60);
+      pipCtx.lineTo(w / 2 + 25, 52);
+      pipCtx.stroke();
+    } else {
+      for (let i = 0; i < 14; i++) {
+        const ox = ((i * 20 + pipPhase * 25) % (w - 60)) + 30;
+        const oy = 40 + Math.sin(i * 1.7) * 16;
+        pipCtx.fillStyle = i % 2 === 0 ? '#99351b' : '#6b2413';
+        pipCtx.beginPath(); pipCtx.arc(ox, oy, 8 + (i % 4), 0, Math.PI * 2); pipCtx.fill();
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------
+   10. SENSOR SELECTOR TABS & TELEMETRY MATRIX
+--------------------------------------------------------------------- */
+const tabMfl = document.getElementById('sel-mfl');
+const tabAe = document.getElementById('sel-ae');
+const tabRgb = document.getElementById('sel-rgb');
+const tabTh = document.getElementById('sel-thermal');
+
+const cardId = document.getElementById('sensor-card-id');
+const cardName = document.getElementById('sensor-card-name');
+const cardMount = document.getElementById('sensor-card-mount');
+const chartTitle = document.getElementById('chart-title');
+const pipTitle = document.getElementById('pip-title');
+const pipTempTag = document.getElementById('pip-temp-tag');
+const pipCaption = document.getElementById('pip-caption');
+
+function selectSensor(type) {
+  state.selectedSensorTab = type;
+  [tabMfl, tabAe, tabRgb, tabTh].forEach(b => {
+    b.className = 'sensor-tab p-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-medium flex items-center gap-1.5 text-left hover:bg-slate-50 shadow-xs';
+  });
+
+  if (type === 'mfl') {
+    tabMfl.className = 'sensor-tab active p-2 rounded-lg bg-cyan-50 border border-cyan-400 text-cyan-900 font-bold flex items-center gap-1.5 text-left shadow-xs';
+    cardId.textContent = 'MFL-RET-04';
+    cardName.textContent = 'Magnetic Flux Leakage Steel-Cord Scanner';
+    cardMount.textContent = 'Return Strand (Fixed)';
+    chartTitle.textContent = 'REAL-TIME MFL FLUX LEAKAGE SPECTRUM';
+    pipTitle.innerHTML = '<i data-lucide="magnet" class="w-3.5 h-3.5 text-cyan-600"></i> MFL SCANNER (RETURN)';
+    pipTempTag.textContent = state.anomalyActive ? 'FLUX: 0.88V (FAIL)' : 'FLUX: 0.05V';
+    pipCaption.textContent = 'Non-Destructive Cord Scanner';
+  } else if (type === 'ae') {
+    tabAe.className = 'sensor-tab active p-2 rounded-lg bg-emerald-50 border border-emerald-400 text-emerald-900 font-bold flex items-center gap-1.5 text-left shadow-xs';
+    cardId.textContent = 'AE-IDLER-28';
+    cardName.textContent = 'Acoustic Emission Stress Transducer';
+    cardMount.textContent = 'Return Idler Transom Stool (Fixed)';
+    chartTitle.textContent = 'ACOUSTIC EMISSION RMS STRESS WAVE (100kHz)';
+    pipTitle.innerHTML = '<i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-600"></i> AE SENSOR (IDLER)';
+    pipTempTag.textContent = state.anomalyActive ? '0.84 V RMS (BURST)' : '0.04 V RMS';
+    pipCaption.textContent = 'Micro-Crack Acoustic Transducer';
+  } else if (type === 'rgb') {
+    tabRgb.className = 'sensor-tab active p-2 rounded-lg bg-amber-50 border border-amber-400 text-amber-900 font-bold flex items-center gap-1.5 text-left shadow-xs';
+    cardId.textContent = 'RGB-CAM-TOP-01';
+    cardName.textContent = '4K High-Speed Optical AI Surface Camera';
+    cardMount.textContent = 'Overhead Mast (Top View)';
+    chartTitle.textContent = 'SURFACE RIP & EDGE TRACKING VARIANCE';
+    pipTitle.innerHTML = '<i data-lucide="camera" class="w-3.5 h-3.5 text-amber-600"></i> RGB-CAM-TOP-01';
+    pipTempTag.textContent = '60 FPS · 4K AI';
+    pipCaption.textContent = 'Optical Surface Tear Inspector';
+  } else if (type === 'thermal') {
+    tabTh.className = 'sensor-tab active p-2 rounded-lg bg-rose-50 border border-rose-400 text-rose-900 font-bold flex items-center gap-1.5 text-left shadow-xs';
+    cardId.textContent = 'TH-CAM-TOP-02';
+    cardName.textContent = 'FLIR Radiometric Thermal IR Array';
+    cardMount.textContent = 'Overhead Mast (Top View)';
+    chartTitle.textContent = 'RADIOMETRIC SPLICE THERMAL PROFILE (°C)';
+    pipTitle.innerHTML = '<i data-lucide="flame" class="w-3.5 h-3.5 text-rose-600"></i> THERMAL-IR-TOP-02';
+    pipTempTag.textContent = state.anomalyActive ? '58.9°C HOTSPOT' : '38.4°C NOM';
+    pipCaption.textContent = 'Radiometric Infrared Heat Map';
+  }
+  lucide.createIcons();
+}
+
+tabMfl.onclick = () => selectSensor('mfl');
+tabAe.onclick = () => selectSensor('ae');
+tabRgb.onclick = () => selectSensor('rgb');
+tabTh.onclick = () => selectSensor('thermal');
+
+/* ---------------------------------------------------------------------
+   11. LIVE CHART.JS (100 Hz TELEMETRY SPECTRUM)
+--------------------------------------------------------------------- */
+const chartCtx = document.getElementById('liveChart').getContext('2d');
+const chartData = {
+  labels: Array.from({ length: 30 }, (_, i) => `${i}`),
+  datasets: [{
+    data: Array.from({ length: 30 }, () => 0.05 + Math.random() * 0.04),
+    borderColor: '#0284c7',
+    backgroundColor: 'rgba(2, 132, 199, 0.08)',
+    borderWidth: 2,
+    tension: 0.35,
+    fill: true,
+    pointRadius: 0
+  }]
+};
+const liveChart = new Chart(chartCtx, {
+  type: 'line',
+  data: chartData,
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: {
+        grid: { color: 'rgba(203, 213, 225, 0.6)' },
+        ticks: { color: '#64748b', font: { size: 9, family: 'monospace' } },
+        min: 0,
+        max: 1.2
+      }
+    }
+  }
+});
+
+/* ---------------------------------------------------------------------
+   12. WAYPOINTS & CAMERA NAVIGATION
+--------------------------------------------------------------------- */
+const WAYPOINTS = {
+  tippler:   { orbitPos: new THREE.Vector3(-126, 16, 26), orbitTarget: new THREE.Vector3(-110, 3, 0), walkX: -108 },
+  crusher:   { orbitPos: new THREE.Vector3(-104, 16, 26), orbitTarget: new THREE.Vector3(-90, 4, 0), walkX: -88 },
+  stockyard: { orbitPos: new THREE.Vector3(-36, 26, 38),  orbitTarget: new THREE.Vector3(-20, 6, -18), walkX: -20 },
+  sensors:   { orbitPos: new THREE.Vector3(12, 11, 19),   orbitTarget: new THREE.Vector3(20, 3.5, 0), walkX: 20 },
+  drive:     { orbitPos: new THREE.Vector3(60, 16, 28),   orbitTarget: new THREE.Vector3(75, 4, 0), walkX: 72 },
+  secondary: { orbitPos: new THREE.Vector3(82, 18, 30),   orbitTarget: new THREE.Vector3(95, 6, 0), walkX: 92 }
+};
+
+function triggerWaypoint(key) {
+  const wp = WAYPOINTS[key];
+  if (!wp) return;
+
+  document.querySelectorAll('.station-btn').forEach(btn => {
+    btn.classList.toggle('border-amber-500', btn.dataset.wp === key);
+    btn.classList.toggle('bg-amber-50/60', btn.dataset.wp === key);
+  });
+
+  if (state.cameraMode === 'orbit') {
+    state.tween = {
+      fromPos: camera.position.clone(),
+      toPos: wp.orbitPos.clone(),
+      fromTgt: controls.target.clone(),
+      toTgt: wp.orbitTarget.clone(),
+      dur: 1.2,
+      t: 0
+    };
+  } else {
+    state.walkPos.x = wp.walkX;
+    camera.position.set(wp.walkX, 4.0, 3.2);
+  }
+}
+
+document.querySelectorAll('.station-btn').forEach(btn => {
+  btn.addEventListener('click', () => triggerWaypoint(btn.dataset.wp));
+});
+
+const btnOrbit = document.getElementById('cam-orbit');
+const btnGallery = document.getElementById('cam-gallery');
+const btnCross = document.getElementById('cam-cross');
+const walkHelp = document.getElementById('walk-nav-help');
+
+function setCameraMode(mode) {
+  state.cameraMode = mode;
+  [btnOrbit, btnGallery, btnCross].forEach(b => {
+    b.classList.remove('bg-amber-500', 'text-white', 'active');
+    b.classList.add('text-slate-700');
+  });
+
+  if (mode === 'orbit') {
+    btnOrbit.classList.add('bg-amber-500', 'text-white', 'active');
+    controls.enabled = true;
+    walkHelp.classList.add('hidden');
+  } else if (mode === 'gallery') {
+    btnGallery.classList.add('bg-amber-500', 'text-white', 'active');
+    controls.enabled = false;
+    walkHelp.classList.remove('hidden');
+    camera.position.set(state.walkPos.x, 3.6, 2.3);
+    state.yaw = Math.PI / 2;
+    state.pitch = -0.05;
+  } else if (mode === 'cross') {
+    btnCross.classList.add('bg-amber-500', 'text-white', 'active');
+    controls.enabled = true;
+    walkHelp.classList.add('hidden');
+    state.tween = {
+      fromPos: camera.position.clone(),
+      toPos: new THREE.Vector3(-15, CV.topY + 1.2, 0.01),
+      fromTgt: controls.target.clone(),
+      toTgt: new THREE.Vector3(15, CV.topY, 0),
+      dur: 1.0,
+      t: 0
+    };
+  }
+}
+
+btnOrbit.onclick = () => setCameraMode('orbit');
+btnGallery.onclick = () => setCameraMode('gallery');
+btnCross.onclick = () => setCameraMode('cross');
+document.getElementById('btn-exit-walk').onclick = () => setCameraMode('orbit');
+
+/* ---------------------------------------------------------------------
+   13. REAL-TIME ANOMALY & 3D BELT DEFECT ENGINE
+--------------------------------------------------------------------- */
+const anomalyBtn = document.getElementById('btn-toggle-anomaly');
+const anomalyBtnLabel = document.getElementById('anomaly-btn-label');
+const alarmBanner = document.getElementById('scada-alarm-banner');
+const topBadge = document.getElementById('top-system-badge');
+const sp4Pill = document.getElementById('synoptic-sp4-pill');
+const sp4Dot = document.getElementById('splice4-synoptic-dot');
+const sp4StatusLabel = document.getElementById('splice4-status-label');
+const pipHealthBadge = document.getElementById('pip-health-badge');
+const stationSensorBadge = document.getElementById('station-sensor-badge');
+
+function toggleFaultSimulation() {
+  state.anomalyActive = !state.anomalyActive;
+
+  if (state.anomalyActive) {
+    anomalyBtnLabel.textContent = 'Reset to Nominal';
+    anomalyBtn.classList.replace('bg-rose-50', 'bg-emerald-50');
+    anomalyBtn.classList.replace('text-rose-700', 'text-emerald-800');
+    anomalyBtn.classList.replace('border-rose-300', 'border-emerald-300');
+    alarmBanner.classList.remove('hidden');
+
+    // 3D Belt Defect Mesh visible
+    defectMeshGroup.visible = true;
+
+    topBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-rose-50 text-rose-800 border border-rose-300 glow-rose';
+    topBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span> ALARM: SPLICE #04 CORD DELAMINATION`;
+
+    const sp4 = splicesList.find(s => s.isSplice4);
+    if (sp4) {
+      sp4.mesh.material.color.set(0xe11d48);
+      sp4.mesh.material.emissive.set(0x881337);
+      sp4.halo.material.color.set(0xe11d48);
+      sp4.halo.material.opacity = 0.85;
+    }
+
+    sp4Pill.classList.replace('bg-emerald-600', 'bg-rose-600');
+    sp4Pill.classList.add('pulse-alarm');
+    sp4Dot.classList.replace('bg-emerald-500', 'bg-rose-600');
+    sp4StatusLabel.textContent = 'CORD DEFECT';
+    sp4StatusLabel.className = 'text-rose-600 font-bold';
+
+    stationSensorBadge.textContent = 'ALARM';
+    stationSensorBadge.className = 'text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-300 glow-rose';
+
+    pipHealthBadge.textContent = 'CRITICAL DEFECT';
+    pipHealthBadge.className = 'text-rose-600 font-bold';
+
+    document.getElementById('diag-val1').textContent = '71.2% (FAIL)';
+    document.getElementById('diag-val1').className = 'text-rose-600 font-bold text-xs mt-0.5';
+    document.getElementById('diag-val2').textContent = '0.88 V RMS (HIGH)';
+    document.getElementById('diag-val2').className = 'text-rose-600 font-bold text-xs mt-0.5';
+    document.getElementById('diag-val4').textContent = '+14.2 mm (SLIP)';
+    document.getElementById('diag-val4').className = 'text-rose-600 font-bold text-xs mt-0.5';
+    document.getElementById('metric-integrity').textContent = '71.2% (ALARM)';
+    document.getElementById('metric-integrity').className = 'text-rose-600 text-sm';
+  } else {
+    anomalyBtnLabel.textContent = 'Trigger Real-Time Belt Defect';
+    anomalyBtn.classList.replace('bg-emerald-50', 'bg-rose-50');
+    anomalyBtn.classList.replace('text-emerald-800', 'text-rose-700');
+    anomalyBtn.classList.replace('border-emerald-300', 'border-rose-300');
+    alarmBanner.classList.add('hidden');
+
+    defectMeshGroup.visible = false;
+
+    topBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300';
+    topBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> OPC-UA LIVE · 100% TELEMETRY NOMINAL`;
+
+    const sp4 = splicesList.find(s => s.isSplice4);
+    if (sp4) {
+      sp4.mesh.material.color.set(0x475569);
+      sp4.mesh.material.emissive.set(0x000000);
+      sp4.halo.material.color.set(0x059669);
+      sp4.halo.material.opacity = 0.35;
+    }
+
+    sp4Pill.classList.replace('bg-rose-600', 'bg-emerald-600');
+    sp4Pill.classList.remove('pulse-alarm');
+    sp4Dot.classList.replace('bg-rose-600', 'bg-emerald-500');
+    sp4StatusLabel.textContent = 'OK';
+    sp4StatusLabel.className = 'text-emerald-600 font-bold';
+
+    stationSensorBadge.textContent = 'MONITOR';
+    stationSensorBadge.className = 'text-[10px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-200';
+
+    pipHealthBadge.textContent = '100% NOMINAL';
+    pipHealthBadge.className = 'text-emerald-600 font-bold';
+
+    document.getElementById('diag-val1').textContent = '99.4% (Nominal)';
+    document.getElementById('diag-val1').className = 'text-emerald-600 font-bold text-xs mt-0.5';
+    document.getElementById('diag-val2').textContent = '0.05 V Flux';
+    document.getElementById('diag-val2').className = 'text-slate-800 font-bold text-xs mt-0.5';
+    document.getElementById('diag-val4').textContent = '+0.2 mm';
+    document.getElementById('diag-val4').className = 'text-slate-800 font-bold text-xs mt-0.5';
+    document.getElementById('metric-integrity').textContent = '99.4%';
+    document.getElementById('metric-integrity').className = 'text-emerald-600 text-sm';
+  }
+  selectSensor(state.selectedSensorTab);
+}
+
+anomalyBtn.onclick = () => toggleFaultSimulation();
+document.getElementById('btn-dismiss-alarm').onclick = () => alarmBanner.classList.add('hidden');
+document.getElementById('btn-focus-fault').onclick = () => triggerWaypoint('sensors');
+
+/* ---------------------------------------------------------------------
+   14. RAYCASTING HOVER & CLICK SENSOR INSPECTION
+--------------------------------------------------------------------- */
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const hoverBadge = document.getElementById('hover-badge');
+const hoverTitle = document.getElementById('hover-badge-title');
+const hoverDesc = document.getElementById('hover-badge-desc');
+
+window.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  if (state.cameraMode !== 'gallery') {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(sensorsList, true);
+
+    if (intersects.length > 0) {
+      let node = intersects[0].object;
+      while (node.parent && !node.userData.id) node = node.parent;
+      if (node.userData.id) {
+        hoverBadge.classList.remove('hidden');
+        hoverBadge.style.left = `${e.clientX + 14}px`;
+        hoverBadge.style.top = `${e.clientY - 12}px`;
+        hoverTitle.textContent = `${node.userData.id} · ${node.userData.name}`;
+        hoverDesc.textContent = `Location: ${node.userData.mount}`;
+        canvas.style.cursor = 'pointer';
+        return;
+      }
+    }
+  }
+  hoverBadge.classList.add('hidden');
+  canvas.style.cursor = state.cameraMode === 'gallery' ? 'crosshair' : 'grab';
+});
+
+window.addEventListener('click', () => {
+  if (hoverBadge && !hoverBadge.classList.contains('hidden')) {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(sensorsList, true);
+    if (intersects.length > 0) {
+      let node = intersects[0].object;
+      while (node.parent && !node.userData.id) node = node.parent;
+      if (node.userData.type) selectSensor(node.userData.type);
+    }
+  }
+});
+
+/* ---------------------------------------------------------------------
+   15. KEYBOARD & MOUSE WALK
+--------------------------------------------------------------------- */
+window.addEventListener('keydown', (e) => { state.keys[e.code] = true; });
+window.addEventListener('keyup', (e) => { state.keys[e.code] = false; });
+
+let isLooking = false, lastMouseX = 0, lastMouseY = 0;
+canvas.addEventListener('mousedown', (e) => {
+  if (state.cameraMode === 'gallery') {
+    isLooking = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+});
+window.addEventListener('mouseup', () => { isLooking = false; });
+window.addEventListener('mousemove', (e) => {
+  if (state.cameraMode === 'gallery' && isLooking) {
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    state.yaw -= dx * 0.003;
+    state.pitch = Math.max(-0.85, Math.min(0.85, state.pitch - dy * 0.003));
+  }
+});
+
+document.getElementById('layer-ore').addEventListener('change', (e) => {
+  ironOreStreamMesh.visible = e.target.checked;
+});
+document.getElementById('layer-sensors').addEventListener('change', (e) => {
+  sensorsList.forEach(s => s.visible = e.target.checked);
+});
+document.getElementById('layer-frustum').addEventListener('change', (e) => {
+  cameraFrustums.forEach(f => f.visible = e.target.checked);
+});
+
+/* ---------------------------------------------------------------------
+   16. SYNCHRONIZED INDUSTRIAL ANIMATION LOOP
+--------------------------------------------------------------------- */
+const clock = new THREE.Clock();
+let telemetryClockAccum = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsedTime = clock.getElapsedTime();
+
+  // 1. Unified Linear Belt Velocity across All Strands & Wraps (5.2 m/s)
+  const linearDist = state.speed * dt;
+  const normalizedSpeed = (linearDist / spanLen) * BELT_REPEAT_X;
+
+  // Top carrying strand & ore run forward (Eastward)
+  carryingBeltTex.offset.x -= normalizedSpeed;
+  oreTexture.offset.x -= normalizedSpeed;
+
+  // Bottom return strand runs backward (Westward) at identical linear speed
+  returnBeltTex.offset.x += normalizedSpeed;
+
+  // Drum wraps rotate in sync
+  headWrapTex.offset.x -= normalizedSpeed * 0.8;
+  tailWrapTex.offset.x -= normalizedSpeed * 0.8;
+
+  // 2. Rotary Tippler Continuous Dumping Cycle (Rotates barrel)
+  tipplerBarrel.rotation.x += dt * 0.65;
+
+  // 3. Pulse Sensor Rings & Defect Glow
+  sensorsList.forEach((s, idx) => {
+    const scale = 1 + Math.sin(elapsedTime * 4 + idx) * 0.25;
+    if (s.userData.ring) s.userData.ring.scale.set(scale, scale, scale);
+  });
+
+  if (state.anomalyActive) {
+    defectHotspot.scale.set(
+      1 + Math.sin(elapsedTime * 8) * 0.2,
+      1 + Math.sin(elapsedTime * 8) * 0.2,
+      1 + Math.sin(elapsedTime * 8) * 0.2
+    );
+  }
+
+  // 4. Render Live Camera PIP Feed
+  renderPipFeed();
+
+  // 5. Camera Tweening
+  if (state.tween) {
+    state.tween.t += dt / state.tween.dur;
+    const p = Math.min(state.tween.t, 1);
+    const ease = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+    camera.position.lerpVectors(state.tween.fromPos, state.tween.toPos, ease);
+    controls.target.lerpVectors(state.tween.fromTgt, state.tween.toTgt, ease);
+    if (p >= 1) state.tween = null;
+  }
+
+  // 6. Walkway Controls
+  if (state.cameraMode === 'gallery') {
+    camera.rotation.set(state.pitch, state.yaw, 0, 'YXZ');
+    const fwd = new THREE.Vector3(Math.cos(state.yaw - Math.PI/2), 0, -Math.sin(state.yaw - Math.PI/2));
+    const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    const moveSpeed = 16.0 * dt;
+
+    if (state.keys['KeyW'] || state.keys['ArrowUp']) state.walkPos.addScaledVector(fwd, moveSpeed);
+    if (state.keys['KeyS'] || state.keys['ArrowDown']) state.walkPos.addScaledVector(fwd, -moveSpeed);
+    if (state.keys['KeyA'] || state.keys['ArrowLeft']) state.walkPos.addScaledVector(right, -moveSpeed);
+    if (state.keys['KeyD'] || state.keys['ArrowRight']) state.walkPos.addScaledVector(right, moveSpeed);
+
+    state.walkPos.x = Math.max(CV.xStart, Math.min(CV.xEnd, state.walkPos.x));
+    state.walkPos.z = 2.3;
+    camera.position.set(state.walkPos.x, 3.6, state.walkPos.z);
+  } else {
+    controls.update();
+  }
+
+  // 7. Telemetry updates (100 Hz OPC-UA Stream)
+  telemetryClockAccum += dt;
+  if (telemetryClockAccum > 0.08) {
+    telemetryClockAccum = 0;
+    const tphNoise = (Math.random() - 0.5) * 40;
+    document.getElementById('metric-tph').textContent = Math.round(state.tph + tphNoise).toLocaleString();
+
+    const chartArr = chartData.datasets[0].data;
+    chartArr.shift();
+    if (state.anomalyActive) {
+      const burst = Math.sin(elapsedTime * 12) > 0.2 ? 0.85 + Math.random() * 0.3 : 0.25 + Math.random() * 0.15;
+      chartArr.push(burst);
+      chartData.datasets[0].borderColor = '#e11d48';
+      chartData.datasets[0].backgroundColor = 'rgba(225, 29, 72, 0.08)';
+    } else {
+      chartArr.push(0.06 + Math.random() * 0.04);
+      chartData.datasets[0].borderColor = '#0284c7';
+      chartData.datasets[0].backgroundColor = 'rgba(2, 132, 199, 0.08)';
+    }
+    liveChart.update();
+  }
+
+  renderer.render(scene, camera);
+}
+
+setInterval(() => {
+  const d = new Date();
+  document.getElementById('live-scada-clock').textContent = d.toTimeString().split(' ')[0] + ' UTC';
+}, 1000);
+
+animate();
+</script>
+</body>
+</html>

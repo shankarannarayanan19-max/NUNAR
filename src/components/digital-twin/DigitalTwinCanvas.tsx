@@ -11,8 +11,9 @@
  * Splice markers, anomaly highlights, sensor positions all driven by live context.
  */
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { Splice, SpliceId, Conveyor } from '../../types';
+import { DigitalTwinViewport } from './DigitalTwinViewport';
 
 // ─── View mode type ───────────────────────────────────────────────────────────
 export type ViewMode = 'orbit' | 'walkway' | 'cross';
@@ -665,59 +666,19 @@ export const DigitalTwinCanvas: React.FC<DigitalTwinCanvasProps> = ({
   inspectionStatus,
   isCameraContaminated,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selectedSplice = splices[selectedSpliceId] || splices['S03'] || Object.values(splices)[0];
-
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-full rounded-xl overflow-hidden bg-slate-950"
-      style={{ minHeight: 340 }}
-    >
-      {/* Zoom wrapper */}
-      <div
-        className="w-full h-full transition-transform duration-300 origin-center"
-        style={{ transform: `scale(${zoom})` }}
-      >
-        {viewMode === 'orbit' && (
-          <OrbitView
-            conveyor={conveyor}
-            splices={splices}
-            selectedSpliceId={selectedSpliceId}
-            onSelectSplice={onSelectSplice}
-            layers={layers}
-            inspectionStatus={inspectionStatus}
-            isCameraContaminated={isCameraContaminated}
-          />
-        )}
-        {viewMode === 'walkway' && (
-          <WalkwayView
-            conveyor={conveyor}
-            splices={splices}
-            selectedSpliceId={selectedSpliceId}
-            onSelectSplice={onSelectSplice}
-            layers={layers}
-          />
-        )}
-        {viewMode === 'cross' && selectedSplice && (
-          <CrossSectionView
-            splice={selectedSplice}
-          />
-        )}
-      </div>
-
-      {/* View mode badge */}
-      <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-slate-900/80 border border-slate-700/60 text-[9px] font-mono-tech text-cyan-500 uppercase tracking-wider pointer-events-none">
-        {viewMode === 'orbit' ? 'Orbit View' : viewMode === 'walkway' ? 'Linear Chainage' : 'Cross-Section'}
-      </div>
-
-      {/* Scanning active indicator */}
-      {(inspectionStatus === 'Scanning' || inspectionStatus === 'In_Inspection_Zone') && (
-        <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-950/90 border border-violet-600/60 text-[9px] font-mono-tech text-violet-300 pointer-events-none">
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-          <span>{inspectionStatus === 'Scanning' ? 'SCANNING' : 'INSPECTION ZONE'}</span>
-        </div>
-      )}
+    <div className="relative w-full h-full rounded-xl overflow-hidden bg-slate-950" style={{ minHeight: 340 }}>
+      <DigitalTwinViewport
+        conveyor={conveyor}
+        splices={splices}
+        selectedSpliceId={selectedSpliceId}
+        onSelectSplice={onSelectSplice}
+        viewMode={viewMode}
+        layers={layers}
+        zoom={zoom}
+        inspectionStatus={inspectionStatus}
+        isCameraContaminated={isCameraContaminated}
+      />
     </div>
   );
 };

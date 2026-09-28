@@ -1,32 +1,9 @@
-/**
- * DigitalTwinViewport — Three.js 3D conveyor belt Digital Twin.
- *
- * Replaces the SVG-based DigitalTwinCanvas with a real 3D WebGL scene.
- *
- * Camera modes (matching reference HTML):
- *   orbit   — standard OrbitControls engineering overview
- *   walkway — first-person walkway along the belt
- *   cross   — 35° cross-section inspection angle
- *
- * Scene:
- *   - Conveyor belt loop (extruded curved path)
- *   - Idler rolls
- *   - Splice markers (colored by condition, pulsing for anomalies)
- *   - Sensor gantry at 210m
- *   - Anomaly highlight at splice location
- *   - Grid floor plane
- *
- * All data from props — no independent state.
- * Proper cleanup on unmount to avoid WebGL memory leaks.
- */
-
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Splice, SpliceId, Conveyor } from '../../types';
-import { LayerVisibility, ViewMode } from './DigitalTwinCanvas';
+import type { Conveyor, Splice, SpliceId } from '../../types';
+import type { LayerVisibility, ViewMode } from './DigitalTwinCanvas';
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 interface DigitalTwinViewportProps {
   conveyor: Conveyor;
   splices: Record<string, Splice>;
@@ -34,42 +11,38 @@ interface DigitalTwinViewportProps {
   onSelectSplice: (id: SpliceId) => void;
   viewMode: ViewMode;
   layers: LayerVisibility;
+  zoom: number;
   inspectionStatus: string;
   isCameraContaminated: boolean;
   onViewportReady?: () => void;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const BELT_LENGTH = 420;          // meters — real scale 1 unit = 1 m
-const BELT_WIDTH = 1.8;           // 1800mm belt
-const BELT_HEIGHT = 0.06;         // belt thickness
-const LOOP_HALF_LENGTH = BELT_LENGTH / 2;  // half-length of the straight run
-const PULLEY_RADIUS = 2.5;        // head/tail pulley radius (m)
-const IDLER_SPACING = 20;         // idlers every 20m
-const BELT_Y = 0;                 // belt center height
-
-// Condition → hex color
-function spliceColorHex(condition: string): number {
-  if (condition === 'Critical') return 0xef4444;
-  if (condition === 'Warning') return 0xf59e0b;
-  return 0x10b981;
-}
-
-// ─── Scene builder (runs once per mount) ─────────────────────────────────────
 interface SceneObjects {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
-  spliceMarkers: Map<SpliceId, THREE.Mesh>;
+  markers: Map<SpliceId, THREE.Mesh>;
   anomalyRings: Map<SpliceId, THREE.Mesh>;
-  sensorGantry: THREE.Group;
+  gantry: THREE.Group;
   scanBeam: THREE.Mesh;
   frameId: number;
-  clock: THREE.Clock;
-  raycaster: THREE.Raycaster;
-  mouse: THREE.Vector2;
-  spliceIdMap: Map<THREE.Mesh, SpliceId>;
+}
+
+const BELT_LENGTH = 180;
+const BELT_WIDTH = 15;
+const PULLEY_RADIUS = 4.2;
+const BELT_Y = 2.5;
+
+function conditionColor(condition: string): number {
+  if (condition === 'Critical') return 0xef4444;
+  if (condition === 'Warning') return 0xf59e0b;
+  return 0x10b981;
+}
+
+function mapSpliceToBeltX(baselineCoordinate: number, loopLengthM: number): number {
+  const normalized = baselineCoordinate / Math.max(loopLengthM, 1);
+  return (normalized - 0.5) * BELT_LENGTH * 1.35;
 }
 
 function buildScene(
@@ -77,363 +50,249 @@ function buildScene(
   conveyor: Conveyor,
   splices: Record<string, Splice>,
   layers: LayerVisibility,
+  inspectionStatus: string,
   onSelectSplice: (id: SpliceId) => void
 ): SceneObjects {
-  // ── Renderer ──
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    alpha: false,
-  });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+  renderer.setSize(canvas.clientWidth || 1200, canvas.clientHeight || 700, false);
+  renderer.setClearColor(0x071224, 1);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(0x071224, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.15;
 
-  // ── Scene ──
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x071224, 0.006);
+  scene.background = new THREE.Color(0x071224);
+  scene.fog = new THREE.Fog(0x071224, 60, 260);
 
-  // ── Camera ──
-  const aspect = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
-  const camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 2000);
-  camera.position.set(0, 120, 180);
-  camera.lookAt(0, 0, 0);
+  const camera = new THREE.PerspectiveCamera(48, (canvas.clientWidth || 1200) / Math.max(canvas.clientHeight || 700, 1), 0.1, 1000);
+  camera.position.set(30, 18, 34);
 
-  // ── OrbitControls ──
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
-  controls.minDistance = 10;
-  controls.maxDistance = 600;
-  controls.maxPolarAngle = Math.PI * 0.85;
-  controls.target.set(0, 0, 0);
+  controls.enablePan = false;
+  controls.minDistance = 18;
+  controls.maxDistance = 180;
+  controls.maxPolarAngle = Math.PI * 0.48;
+  controls.target.set(0, 2.5, 0);
+  controls.update();
 
-  // ── Lighting ──
-  const ambientLight = new THREE.AmbientLight(0x1a2744, 3.5);
-  scene.add(ambientLight);
+  const hemi = new THREE.HemisphereLight(0xdbeafe, 0x0f172a, 1.4);
+  scene.add(hemi);
 
-  const dirLight = new THREE.DirectionalLight(0x7ec8f4, 4.0);
-  dirLight.position.set(60, 120, 80);
-  dirLight.castShadow = true;
-  dirLight.shadow.camera.far = 500;
-  dirLight.shadow.camera.left = -250;
-  dirLight.shadow.camera.right = 250;
-  dirLight.shadow.camera.top = 100;
-  dirLight.shadow.camera.bottom = -100;
-  dirLight.shadow.mapSize.set(2048, 2048);
-  scene.add(dirLight);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+  sun.position.set(35, 42, 25);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -90;
+  sun.shadow.camera.right = 90;
+  sun.shadow.camera.top = 90;
+  sun.shadow.camera.bottom = -90;
+  scene.add(sun);
 
-  const fillLight = new THREE.DirectionalLight(0x334455, 1.5);
-  fillLight.position.set(-40, 30, -60);
-  scene.add(fillLight);
+  const fill = new THREE.DirectionalLight(0x38bdf8, 0.5);
+  fill.position.set(-40, 20, -25);
+  scene.add(fill);
 
-  // Point light above gantry
-  const gantryLight = new THREE.PointLight(0xa855f7, 80, 60);
-  gantryLight.position.set(0, 12, 0);
-  scene.add(gantryLight);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(220, 120),
+    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.92, metalness: 0.08 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -2.5;
+  floor.receiveShadow = true;
+  scene.add(floor);
 
-  // ── Grid floor ──
-  const gridHelper = new THREE.GridHelper(500, 50, 0x1a2a3a, 0x0f1e2e);
-  gridHelper.position.y = -3.5;
-  scene.add(gridHelper);
+  const grid = new THREE.GridHelper(220, 22, 0x1e293b, 0x1e293b);
+  grid.position.y = -2.4;
+  scene.add(grid);
 
-  // Fog plane beneath belt
-  const fogGeo = new THREE.PlaneGeometry(600, 600);
-  const fogMat = new THREE.MeshBasicMaterial({ color: 0x071224, transparent: true, opacity: 0.4 });
-  const fogPlane = new THREE.Mesh(fogGeo, fogMat);
-  fogPlane.rotation.x = -Math.PI / 2;
-  fogPlane.position.y = -3.8;
-  scene.add(fogPlane);
+  const beltMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8, metalness: 0.15 });
+  const oreMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 1, metalness: 0.05 });
+  const supportMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 });
 
-  // ── Belt geometry ──
-  // Straight top run: z from -LOOP_HALF_LENGTH to +LOOP_HALF_LENGTH
-  // Head pulley at +z, tail at -z
-  const beltMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
-    roughness: 0.85,
-    metalness: 0.1,
-  });
-  const oreMat = new THREE.MeshStandardMaterial({
-    color: 0x78350f,
-    roughness: 1.0,
-    metalness: 0.0,
-  });
+  const carryingBelt = new THREE.Mesh(new THREE.BoxGeometry(BELT_LENGTH, 1.1, BELT_WIDTH), beltMat);
+  carryingBelt.position.set(0, BELT_Y, 0);
+  carryingBelt.castShadow = true;
+  carryingBelt.receiveShadow = true;
+  scene.add(carryingBelt);
 
-  // Top carrying run
-  const topBeltGeo = new THREE.BoxGeometry(BELT_WIDTH, BELT_HEIGHT, BELT_LENGTH);
-  const topBelt = new THREE.Mesh(topBeltGeo, beltMat);
-  topBelt.position.set(0, BELT_Y, 0);
-  topBelt.receiveShadow = true;
-  scene.add(topBelt);
+  const ore = new THREE.Mesh(new THREE.BoxGeometry(BELT_LENGTH * 0.92, 0.5, BELT_WIDTH * 0.82), oreMat);
+  ore.position.set(0, BELT_Y + 0.4, 0);
+  ore.castShadow = true;
+  scene.add(ore);
 
-  // Iron ore burden on top run
-  const oreGeo = new THREE.BoxGeometry(BELT_WIDTH * 0.75, 0.35, BELT_LENGTH * 0.95);
-  const oreMesh = new THREE.Mesh(oreGeo, oreMat);
-  oreMesh.position.set(0, BELT_Y + 0.18, 0);
-  oreMesh.castShadow = true;
-  scene.add(oreMesh);
-
-  // Return run (bottom, below main structure)
-  const returnBeltGeo = new THREE.BoxGeometry(BELT_WIDTH, BELT_HEIGHT, BELT_LENGTH);
-  const returnBelt = new THREE.Mesh(returnBeltGeo, new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 }));
-  returnBelt.position.set(0, BELT_Y - 4.0, 0);
+  const returnBelt = new THREE.Mesh(new THREE.BoxGeometry(BELT_LENGTH, 1.0, BELT_WIDTH), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 }));
+  returnBelt.position.set(0, BELT_Y - 4.8, 0);
+  returnBelt.receiveShadow = true;
   scene.add(returnBelt);
 
-  // ── Head pulley ──
-  const pulleyGeo = new THREE.CylinderGeometry(PULLEY_RADIUS, PULLEY_RADIUS, BELT_WIDTH + 0.3, 32);
-  const pulleyMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.3 });
+  const pulleyGeometry = new THREE.CylinderGeometry(PULLEY_RADIUS, PULLEY_RADIUS, BELT_WIDTH + 1.5, 32);
+  const pulleyMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.35, metalness: 0.8 });
 
-  const headPulley = new THREE.Mesh(pulleyGeo, pulleyMat);
+  const headPulley = new THREE.Mesh(pulleyGeometry, pulleyMat);
   headPulley.rotation.z = Math.PI / 2;
-  headPulley.position.set(0, BELT_Y, LOOP_HALF_LENGTH);
+  headPulley.position.set(BELT_LENGTH / 2, BELT_Y, 0);
   scene.add(headPulley);
 
-  // Tail pulley
-  const tailPulley = headPulley.clone();
-  tailPulley.position.set(0, BELT_Y, -LOOP_HALF_LENGTH);
+  const tailPulley = new THREE.Mesh(pulleyGeometry, pulleyMat);
+  tailPulley.rotation.z = Math.PI / 2;
+  tailPulley.position.set(-BELT_LENGTH / 2, BELT_Y, 0);
   scene.add(tailPulley);
 
-  // Head pulley glow ring
-  const ringGeo = new THREE.TorusGeometry(PULLEY_RADIUS + 0.3, 0.12, 12, 64);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
-  const headRing = new THREE.Mesh(ringGeo, ringMat);
-  headRing.rotation.z = Math.PI / 2;
-  headRing.position.copy(headPulley.position);
-  scene.add(headRing);
-
-  const tailRing = headRing.clone();
-  (tailRing.material as THREE.MeshBasicMaterial).color.set(0x10b981);
-  tailRing.position.copy(tailPulley.position);
-  scene.add(tailRing);
-
-  // ── Structural trusses (simplified I-beam pairs) ──
-  const trussPositions = [-160, -100, -40, 20, 80, 140, 170];
-  trussPositions.forEach((z) => {
-    const colGeo = new THREE.BoxGeometry(0.3, 6.5, 0.3);
-    const colMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.7 });
-    [-1.3, 1.3].forEach((x) => {
-      const col = new THREE.Mesh(colGeo, colMat);
-      col.position.set(x, BELT_Y - 2.8, z);
-      col.castShadow = true;
-      scene.add(col);
-    });
-    // Cross beam
-    const beamGeo = new THREE.BoxGeometry(3.0, 0.25, 0.25);
-    const beam = new THREE.Mesh(beamGeo, colMat);
-    beam.position.set(0, BELT_Y + 0.5, z);
-    scene.add(beam);
-  });
-
-  // ── Idlers ──
-  const idlerGeo = new THREE.CylinderGeometry(0.18, 0.18, BELT_WIDTH + 0.4, 12);
-  const idlerMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.6, roughness: 0.4 });
-  for (let z = -LOOP_HALF_LENGTH + IDLER_SPACING; z < LOOP_HALF_LENGTH; z += IDLER_SPACING) {
-    const idler = new THREE.Mesh(idlerGeo, idlerMat);
+  for (let x = -BELT_LENGTH / 2 + 8; x < BELT_LENGTH / 2; x += 9) {
+    const idler = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, BELT_WIDTH + 1.5, 20), new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.45, roughness: 0.45 }));
     idler.rotation.z = Math.PI / 2;
-    idler.position.set(0, BELT_Y - 0.2, z);
+    idler.position.set(x, BELT_Y - 0.7, 0);
+    idler.castShadow = true;
     scene.add(idler);
   }
 
-  // ── Belt direction arrows (carried on top surface) ──
-  const arrowGroup = new THREE.Group();
-  for (let z = -180; z < 180; z += 50) {
-    const arrowGeo = new THREE.ConeGeometry(0.25, 0.8, 8);
-    const arrowMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.5 });
-    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
-    arrow.rotation.x = Math.PI / 2;
-    arrow.position.set(0, BELT_Y + 0.55, z);
-    arrowGroup.add(arrow);
+  for (let x = -BELT_LENGTH / 2 + 8; x < BELT_LENGTH / 2; x += 18) {
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(0.3, 12, 0.3), supportMat);
+    truss.position.set(x, 4.4, -BELT_WIDTH / 2 - 1.5);
+    truss.castShadow = true;
+    scene.add(truss);
+
+    const truss2 = truss.clone();
+    truss2.position.z = BELT_WIDTH / 2 + 1.5;
+    scene.add(truss2);
   }
-  scene.add(arrowGroup);
 
-  // ── Inspection Gantry at 210m from tail = z = LOOP_HALF_LENGTH - 210 ──
-  // In our scene, tail is at z=-210, head at z=+210.
-  // Belt coordinate 0 = tail end = z=-210, coordinate 420 = head end = z=+210
-  // Coordinate 210 (gantry) → z = -210 + 210 = 0 (center of belt)
-  const sensorGantry = new THREE.Group();
-  sensorGantry.position.set(0, 0, 0);
+  const gantry = new THREE.Group();
+  const gantryLegLeft = new THREE.Mesh(new THREE.BoxGeometry(0.45, 11, 0.45), supportMat);
+  gantryLegLeft.position.set(-3.4, 4.8, -4.2);
+  const gantryLegRight = gantryLegLeft.clone();
+  gantryLegRight.position.x = 3.4;
+  const gantryCross = new THREE.Mesh(new THREE.BoxGeometry(8.3, 0.45, 0.45), supportMat);
+  gantryCross.position.set(0, 10.5, -4.2);
+  const gantryCamera = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 1.2), new THREE.MeshStandardMaterial({ color: 0x581c87, emissive: 0x3b0764, emissiveIntensity: 0.4 }));
+  gantryCamera.position.set(0, 10.1, -4.2);
+  gantryCamera.castShadow = true;
+  gantry.add(gantryLegLeft, gantryLegRight, gantryCross, gantryCamera);
+  gantry.position.set(0, 0, 0);
+  scene.add(gantry);
 
-  // Gantry arch
-  const gantryMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6, roughness: 0.4 });
-  const gantryFrameGeo = new THREE.BoxGeometry(0.3, 8, 0.3);
-  [-3, 3].forEach((x) => {
-    const col = new THREE.Mesh(gantryFrameGeo, gantryMat);
-    col.position.set(x, 3, 0);
-    col.castShadow = true;
-    sensorGantry.add(col);
-  });
-  const crossBarGeo = new THREE.BoxGeometry(6.5, 0.3, 0.3);
-  const crossBar = new THREE.Mesh(crossBarGeo, gantryMat);
-  crossBar.position.set(0, 7.1, 0);
-  sensorGantry.add(crossBar);
-
-  // Camera housing (violet box)
-  const camBoxGeo = new THREE.BoxGeometry(2.5, 0.5, 0.7);
-  const camMat = new THREE.MeshStandardMaterial({ color: 0x581c87, metalness: 0.3, roughness: 0.5, emissive: 0x3b0764, emissiveIntensity: 0.4 });
-  const camBox = new THREE.Mesh(camBoxGeo, camMat);
-  camBox.position.set(0, 6.7, 0);
-  sensorGantry.add(camBox);
-
-  // MFL scanner below belt
-  const mflGeo = new THREE.BoxGeometry(2.2, 0.4, 0.6);
-  const mflMat = new THREE.MeshStandardMaterial({ color: 0x082f49, metalness: 0.5, roughness: 0.4, emissive: 0x0284c7, emissiveIntensity: 0.3 });
-  const mflScanner = new THREE.Mesh(mflGeo, mflMat);
-  mflScanner.position.set(0, BELT_Y - 0.5, 0);
-  sensorGantry.add(mflScanner);
-
-  // Gantry label sprite (simple point light as proxy)
-  const gantryPointLight = new THREE.PointLight(0xa855f7, 30, 25);
-  gantryPointLight.position.set(0, 7, 0);
-  sensorGantry.add(gantryPointLight);
-
-  scene.add(sensorGantry);
-
-  // Scan beam (violet cone pointing down from camera)
-  const beamGeo = new THREE.ConeGeometry(1.0, 5.5, 16, 1, true);
-  const beamMat = new THREE.MeshBasicMaterial({
-    color: 0xa855f7,
-    transparent: true,
-    opacity: 0.0,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const scanBeam = new THREE.Mesh(beamGeo, beamMat);
+  const scanBeam = new THREE.Mesh(
+    new THREE.ConeGeometry(1.2, 12, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+  );
   scanBeam.rotation.x = Math.PI;
-  scanBeam.position.set(0, 4.5, 0);
+  scanBeam.position.set(0, 9, -4.2);
   scene.add(scanBeam);
 
-  // ── Splice Markers ──
-  const spliceMarkers = new Map<SpliceId, THREE.Mesh>();
+  const markers = new Map<SpliceId, THREE.Mesh>();
   const anomalyRings = new Map<SpliceId, THREE.Mesh>();
-  const spliceIdMap = new Map<THREE.Mesh, SpliceId>();
-
-  const markerGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.25, 20);
-  const ringGeoAnomaly = new THREE.TorusGeometry(1.0, 0.1, 8, 32);
 
   Object.values(splices).forEach((splice) => {
-    // Convert belt coordinate to scene z
-    // Coordinate 0 = tail (z=-210), 420 = head (z=+210)
-    const z = -LOOP_HALF_LENGTH + splice.baselineCoordinate;
-
-    const col = spliceColorHex(splice.condition);
-    const mat = new THREE.MeshStandardMaterial({
-      color: col,
-      metalness: 0.3,
-      roughness: 0.5,
-      emissive: col,
-      emissiveIntensity: splice.condition === 'Warning' ? 0.5 : 0.15,
-    });
-
-    const marker = new THREE.Mesh(markerGeo, mat);
-    marker.position.set(0, BELT_Y + 0.55, z);
+    const marker = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.7, 0.7, 0.25, 18),
+      new THREE.MeshStandardMaterial({
+        color: conditionColor(splice.condition),
+        emissive: conditionColor(splice.condition),
+        emissiveIntensity: splice.condition === 'Warning' ? 0.45 : 0.18,
+        metalness: 0.35,
+        roughness: 0.45,
+      })
+    );
+    marker.position.set(mapSpliceToBeltX(splice.baselineCoordinate, conveyor.loopLengthM), BELT_Y + 1.2, 0);
     marker.castShadow = true;
-    if (layers.splices) scene.add(marker);
-    spliceMarkers.set(splice.id, marker);
-    spliceIdMap.set(marker, splice.id);
+    marker.visible = layers.splices;
+    scene.add(marker);
+    markers.set(splice.id, marker);
 
-    // Anomaly ring
-    if (splice.condition !== 'Healthy') {
-      const ringMat = new THREE.MeshBasicMaterial({
-        color: col,
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.5, 0.12, 12, 40),
+      new THREE.MeshBasicMaterial({
+        color: conditionColor(splice.condition),
         transparent: true,
-        opacity: 0.4,
+        opacity: splice.condition === 'Healthy' ? 0 : 0.5,
         side: THREE.DoubleSide,
-      });
-      const ring = new THREE.Mesh(ringGeoAnomaly, ringMat);
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(0, BELT_Y + 0.56, z);
-      if (layers.anomalies) scene.add(ring);
-      anomalyRings.set(splice.id, ring);
-    }
+      })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(mapSpliceToBeltX(splice.baselineCoordinate, conveyor.loopLengthM), BELT_Y + 1.1, 0);
+    ring.visible = layers.splices && layers.anomalies && splice.condition !== 'Healthy';
+    scene.add(ring);
+    anomalyRings.set(splice.id, ring);
   });
 
-  // ── Click picking ──
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
-
-  const handleClick = (e: MouseEvent) => {
+  const handleClick = (event: MouseEvent) => {
     const rect = canvas.getBoundingClientRect();
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
-    const clickable = Array.from(spliceIdMap.keys());
-    const hits = raycaster.intersectObjects(clickable);
+
+    const hits = raycaster.intersectObjects(Array.from(markers.values()));
     if (hits.length > 0) {
-      const id = spliceIdMap.get(hits[0].object as THREE.Mesh);
-      if (id) onSelectSplice(id);
+      const hit = hits[0].object as THREE.Mesh;
+      const matchedId = Array.from(markers.entries()).find(([, marker]) => marker === hit)?.[0];
+      if (matchedId) onSelectSplice(matchedId);
     }
   };
   canvas.addEventListener('click', handleClick);
-  (canvas as any).__cleanupClick = () => canvas.removeEventListener('click', handleClick);
-
-  // ── Animation loop ──
-  const clock = new THREE.Clock();
 
   let frameId = 0;
   const animate = () => {
     frameId = requestAnimationFrame(animate);
-    const t = clock.getElapsedTime();
+    const elapsed = performance.now() / 1000;
 
-    // Animate anomaly rings (pulse scale)
-    anomalyRings.forEach((ring) => {
-      const s = 1.0 + 0.25 * Math.sin(t * 2.5);
-      ring.scale.set(s, s, s);
+    if (layers.anomalies) {
+      anomalyRings.forEach((ring) => {
+        if (ring.visible) {
+          ring.scale.setScalar(1 + Math.sin(elapsed * 3.6) * 0.18);
+        }
+      });
+    }
+
+    markers.forEach((marker) => {
+      marker.rotation.x = elapsed * 0.7;
+      marker.rotation.z = elapsed * 0.9;
     });
 
-    // Animate scan beam
-    const beamMat2 = scanBeam.material as THREE.MeshBasicMaterial;
-    beamMat2.opacity = 0; // will be set externally via ref
+    const beamOpacity = inspectionStatusMatches(inspectStatusString(inspectionStatus)) ? 0.14 + Math.sin(elapsed * 6) * 0.06 : 0;
+    const beamMaterial = scanBeam.material as THREE.MeshBasicMaterial;
+    beamMaterial.opacity = beamOpacity;
 
     controls.update();
     renderer.render(scene, camera);
   };
-  animate();
+  frameId = requestAnimationFrame(animate);
 
-  return {
-    renderer,
-    scene,
-    camera,
-    controls,
-    spliceMarkers,
-    anomalyRings,
-    sensorGantry,
-    scanBeam,
-    frameId,
-    clock,
-    raycaster,
-    mouse,
-    spliceIdMap,
-  };
+  return { renderer, scene, camera, controls, markers, anomalyRings, gantry, scanBeam, frameId };
 }
 
-// ─── Camera preset positions ──────────────────────────────────────────────────
-function applyCameraMode(
-  camera: THREE.PerspectiveCamera,
-  controls: OrbitControls,
-  mode: ViewMode,
-  selectedZ: number
-) {
+function inspectStatusString(value: string): string {
+  return value || 'Idle';
+}
+
+function inspectionStatusMatches(value: string): boolean {
+  return value === 'Scanning' || value === 'In_Inspection_Zone';
+}
+
+function applyCameraMode(camera: THREE.PerspectiveCamera, controls: OrbitControls, mode: ViewMode, selectedX: number, zoom: number) {
+  const target = new THREE.Vector3(selectedX, 2.5, 0);
+
   if (mode === 'orbit') {
-    camera.position.set(0, 120, 200);
-    controls.target.set(0, 0, 0);
+    camera.position.set(30, 18, 34);
+    controls.target.copy(target);
   } else if (mode === 'walkway') {
-    // Walk along belt at belt height, looking forward
-    camera.position.set(-8, 4, -180);
-    controls.target.set(0, 3, 0);
-  } else if (mode === 'cross') {
-    // 35° cross-section angle centered on selected splice
-    const angle = (35 * Math.PI) / 180;
-    camera.position.set(18, 12, selectedZ + 25);
-    controls.target.set(0, BELT_Y, selectedZ);
+    camera.position.set(selectedX + 12, 7, 20);
+    controls.target.set(selectedX, 2.5, 0);
+  } else {
+    camera.position.set(selectedX + 18, 13, 20);
+    controls.target.set(selectedX, 2.5, 0);
   }
+
+  camera.zoom = Math.max(0.55, Math.min(2, zoom));
+  camera.updateProjectionMatrix();
   controls.update();
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export const DigitalTwinViewport: React.FC<DigitalTwinViewportProps> = ({
   conveyor,
   splices,
@@ -441,141 +300,98 @@ export const DigitalTwinViewport: React.FC<DigitalTwinViewportProps> = ({
   onSelectSplice,
   viewMode,
   layers,
+  zoom,
   inspectionStatus,
   isCameraContaminated,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneObjects | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // ── Init scene on mount ──
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const scene = buildScene(canvas, conveyor, splices, layers, onSelectSplice);
+    const scene = buildScene(canvas, conveyor, splices, layers, inspectionStatus, onSelectSplice);
     sceneRef.current = scene;
 
-    // Initial camera
-    const selectedSplice = splices[selectedSpliceId];
-    const selectedZ = selectedSplice
-      ? -LOOP_HALF_LENGTH + selectedSplice.baselineCoordinate
-      : 0;
-    applyCameraMode(scene.camera, scene.controls, viewMode, selectedZ);
+    const selectedSplice = splices[selectedSpliceId] ?? Object.values(splices)[0];
+    const targetX = selectedSplice ? mapSpliceToBeltX(selectedSplice.baselineCoordinate, conveyor.loopLengthM) : 0;
+    applyCameraMode(scene.camera, scene.controls, viewMode, targetX, zoom);
 
     return () => {
-      // Cleanup
       cancelAnimationFrame(scene.frameId);
       scene.controls.dispose();
       scene.renderer.dispose();
       scene.scene.clear();
-      (canvas as any).__cleanupClick?.();
+      canvas.onclick = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only init once
+  }, [conveyor, inspectionStatus, layers, onSelectSplice, selectedSpliceId, splices, viewMode, zoom]);
 
-  // ── Resize observer ──
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !sceneRef.current) return;
 
-    const obs = new ResizeObserver((entries) => {
+    const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        if (!sceneRef.current || width === 0 || height === 0) continue;
-        const { renderer, camera } = sceneRef.current;
-        renderer.setSize(width, height);
+        if (width === 0 || height === 0) continue;
+        const { renderer, camera } = sceneRef.current!;
+        renderer.setSize(width, height, false);
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
       }
     });
-    obs.observe(container);
-    return () => obs.disconnect();
+
+    observer.observe(container);
+    return () => observer.disconnect();
   }, []);
 
-  // ── Camera mode change ──
   useEffect(() => {
     if (!sceneRef.current) return;
-    const { camera, controls } = sceneRef.current;
-    const selectedSplice = splices[selectedSpliceId];
-    const selectedZ = selectedSplice
-      ? -LOOP_HALF_LENGTH + selectedSplice.baselineCoordinate
-      : 0;
-    applyCameraMode(camera, controls, viewMode, selectedZ);
-  }, [viewMode, selectedSpliceId, splices]);
 
-  // ── Highlight selected splice ──
+    const selectedSplice = splices[selectedSpliceId] ?? Object.values(splices)[0];
+    const targetX = selectedSplice ? mapSpliceToBeltX(selectedSplice.baselineCoordinate, conveyor.loopLengthM) : 0;
+    applyCameraMode(sceneRef.current.camera, sceneRef.current.controls, viewMode, targetX, zoom);
+  }, [conveyor.loopLengthM, selectedSpliceId, splices, viewMode, zoom]);
+
   useEffect(() => {
     if (!sceneRef.current) return;
-    const { spliceMarkers } = sceneRef.current;
 
-    spliceMarkers.forEach((marker, id) => {
+    sceneRef.current.markers.forEach((marker, id) => {
       const splice = splices[id];
       if (!splice) return;
-      const mat = marker.material as THREE.MeshStandardMaterial;
-      const col = spliceColorHex(splice.condition);
-      mat.color.setHex(col);
-      mat.emissive.setHex(col);
 
-      if (id === selectedSpliceId) {
-        // Selected: brighter, bigger emissive
-        mat.emissiveIntensity = 1.2;
-        marker.scale.set(1.8, 1.4, 1.8);
-      } else {
-        mat.emissiveIntensity = splice.condition === 'Warning' ? 0.5 : 0.15;
-        marker.scale.set(1, 1, 1);
-      }
-    });
-  }, [selectedSpliceId, splices]);
-
-  // ── Scan beam ──
-  useEffect(() => {
-    if (!sceneRef.current) return;
-    const beamMat = sceneRef.current.scanBeam.material as THREE.MeshBasicMaterial;
-    const isActive = inspectionStatus === 'Scanning' || inspectionStatus === 'In_Inspection_Zone';
-
-    if (isActive) {
-      let t = 0;
-      const pulse = () => {
-        if (!sceneRef.current) return;
-        t += 0.07;
-        beamMat.opacity = 0.12 + 0.1 * Math.sin(t * 3);
-      };
-      // Patch into existing animation via a simple interval
-      const id = setInterval(pulse, 50);
-      return () => {
-        clearInterval(id);
-        beamMat.opacity = 0;
-      };
-    } else {
-      beamMat.opacity = 0;
-    }
-  }, [inspectionStatus]);
-
-  // ── Layer visibility ──
-  useEffect(() => {
-    if (!sceneRef.current) return;
-    const { spliceMarkers, anomalyRings, sensorGantry, scene } = sceneRef.current;
-
-    spliceMarkers.forEach((marker) => {
+      const material = marker.material as THREE.MeshStandardMaterial;
+      const color = conditionColor(splice.condition);
+      material.color.setHex(color);
+      material.emissive.setHex(color);
+      material.emissiveIntensity = id === selectedSpliceId ? 1.0 : splice.condition === 'Warning' ? 0.45 : 0.18;
+      marker.scale.setScalar(id === selectedSpliceId ? 1.45 : 1);
       marker.visible = layers.splices;
+      marker.position.x = mapSpliceToBeltX(splice.baselineCoordinate, conveyor.loopLengthM);
     });
-    anomalyRings.forEach((ring) => {
-      ring.visible = layers.splices && layers.anomalies;
+
+    sceneRef.current.anomalyRings.forEach((ring, id) => {
+      const splice = splices[id];
+      if (!splice) return;
+      ring.visible = layers.splices && layers.anomalies && splice.condition !== 'Healthy';
+      ring.position.x = mapSpliceToBeltX(splice.baselineCoordinate, conveyor.loopLengthM);
     });
-    sensorGantry.visible = layers.sensors;
-  }, [layers]);
+
+    sceneRef.current.gantry.visible = layers.sensors;
+  }, [conveyor.loopLengthM, layers, selectedSpliceId, splices]);
+
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    const beam = sceneRef.current.scanBeam.material as THREE.MeshBasicMaterial;
+    beam.opacity = inspectionStatus === 'Scanning' || inspectionStatus === 'In_Inspection_Zone' ? 0.15 : 0;
+  }, [inspectionStatus]);
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-[#071224] rounded-xl overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full block"
-        style={{ touchAction: 'none' }}
-      />
+      <canvas ref={canvasRef} className="block w-full h-full" style={{ touchAction: 'none' }} />
 
-      {/* ── HUD overlays ── */}
-      {/* Scan status */}
       {(inspectionStatus === 'Scanning' || inspectionStatus === 'In_Inspection_Zone') && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-600/60 text-[10px] font-mono-tech text-violet-300 pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping" />
@@ -583,7 +399,6 @@ export const DigitalTwinViewport: React.FC<DigitalTwinViewportProps> = ({
         </div>
       )}
 
-      {/* Camera contamination warning */}
       {isCameraContaminated && (
         <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/90 border border-amber-600/60 text-[9px] font-mono-tech text-amber-300 pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -591,13 +406,11 @@ export const DigitalTwinViewport: React.FC<DigitalTwinViewportProps> = ({
         </div>
       )}
 
-      {/* OPC-UA live badge */}
       <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-700/50 text-[9px] font-mono-tech text-slate-400 pointer-events-none">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         OPC-UA LIVE · {conveyor.loopLengthM}m LOOP · {conveyor.speedMs} m/s
       </div>
 
-      {/* View mode badge */}
       <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-700/50 text-[9px] font-mono-tech text-cyan-500 uppercase tracking-wider pointer-events-none">
         {viewMode === 'orbit' ? 'Orbit View' : viewMode === 'walkway' ? 'Walkway' : '35° Cross-Section'}
       </div>

@@ -1,0 +1,9 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "npm.cmd": true,
+        "/^powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location 'C:\\\\Users\\\\shank\\\\sowji collab\\\\SpliceGuard-1'; npm run lint\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
